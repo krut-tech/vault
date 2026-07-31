@@ -1,6 +1,6 @@
 import { useCallback, useRef, useState } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
-import { Play } from 'lucide-react'
+import { Play, Terminal } from 'lucide-react'
 import { useDebouncedCallback } from '../lib/useDebouncedCallback'
 import { saveFileContent } from '../lib/api/files'
 import { runCode, isExecutable, type RunResult } from '../lib/api/execute'
@@ -21,6 +21,8 @@ export default function CodeEditor({ fileId, initialContent, language, userId, o
   const [running, setRunning] = useState(false)
   const [runResult, setRunResult] = useState<RunResult | null>(null)
   const [showOutput, setShowOutput] = useState(false)
+  const [showStdin, setShowStdin] = useState(false)
+  const [stdin, setStdin] = useState('')
   const contentRef = useRef(initialContent)
 
   const persist = useCallback(
@@ -53,7 +55,7 @@ export default function CodeEditor({ fileId, initialContent, language, userId, o
   async function handleRun() {
     setShowOutput(true)
     setRunning(true)
-    const result = await runCode(language, contentRef.current)
+    const result = await runCode(language, contentRef.current, stdin)
     setRunResult(result)
     setRunning(false)
   }
@@ -64,13 +66,36 @@ export default function CodeEditor({ fileId, initialContent, language, userId, o
         <span className="text-gray-400 uppercase tracking-wide">{language}</span>
         <div className="flex items-center gap-3">
           {isExecutable(language) && (
-            <button onClick={handleRun} disabled={running} className="flex items-center gap-1 text-cyan hover:text-cyan/80 disabled:opacity-50" title="Run code">
-              <Play size={13} /> Run
-            </button>
+            <>
+              <button
+                onClick={() => setShowStdin((v) => !v)}
+                className={`flex items-center gap-1 hover:text-violet/80 ${showStdin ? 'text-violet' : 'text-gray-400'}`}
+                title="Program input (stdin)"
+              >
+                <Terminal size={13} /> Input
+              </button>
+              <button onClick={handleRun} disabled={running} className="flex items-center gap-1 text-cyan hover:text-cyan/80 disabled:opacity-50" title="Run code">
+                <Play size={13} /> Run
+              </button>
+            </>
           )}
           <SaveIndicator status={status} />
         </div>
       </div>
+      {showStdin && isExecutable(language) && (
+        <div className="border-b border-white/10 px-4 py-2 bg-black/20">
+          <label className="text-[10px] uppercase tracking-wide text-gray-500 mb-1 block">
+            Stdin — one value per line, fed to input() / cin / Scanner in order
+          </label>
+          <textarea
+            value={stdin}
+            onChange={(e) => setStdin(e.target.value)}
+            placeholder={'e.g.\n1\nHello'}
+            rows={3}
+            className="w-full bg-black/30 border border-white/10 rounded-lg px-2 py-1.5 text-xs font-mono text-gray-200 focus:outline-none focus:border-cyan/50 resize-y"
+          />
+        </div>
+      )}
       <div className="flex-1 min-h-0">
         <Editor
           height="100%"
