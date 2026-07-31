@@ -22,11 +22,20 @@ export default function NotificationBell() {
     const channel = supabase
       .channel(`notifications-${user.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, (payload) => {
-        setNotifications((prev) => [payload.new as Notification, ...prev])
+        setNotifications((prev) => (prev.some((n) => n.id === (payload.new as Notification).id) ? prev : [payload.new as Notification, ...prev]))
       })
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    // Fallback: re-fetch every minute in case the realtime socket drops silently
+    // (network hiccups, tab suspension, etc.) so notifications never go stale.
+    const pollId = window.setInterval(() => {
+      listNotifications(user.id).then(setNotifications)
+    }, 60_000)
+
+    return () => {
+      supabase.removeChannel(channel)
+      window.clearInterval(pollId)
+    }
   }, [user])
 
   useEffect(() => {
