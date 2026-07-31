@@ -1,7 +1,7 @@
-import { useEffect, useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent, type MouseEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, FolderGit2, Trash2, Kanban as KanbanIcon, Timer, ShieldCheck, Activity, StickyNote } from 'lucide-react'
-import { listProjects, createProject } from '../lib/api/projects'
+import { Plus, FolderGit2, Trash2, Pencil, Kanban as KanbanIcon, Timer, ShieldCheck, Activity, StickyNote } from 'lucide-react'
+import { listProjects, createProject, renameProject, softDeleteProject } from '../lib/api/projects'
 import { LANGUAGES } from '../types/vault'
 import type { Project } from '../types/vault'
 import { useAuthStore } from '../store/authStore'
@@ -33,6 +33,23 @@ export default function Projects() {
     refresh()
     load()
   }, [load])
+
+  async function handleRename(e: MouseEvent, project: Project) {
+    e.preventDefault()
+    e.stopPropagation()
+    const name = window.prompt('New project name', project.name)
+    if (!name || name.trim() === '' || name === project.name) return
+    await renameProject(project.id, name.trim())
+    setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, name: name.trim() } : p)))
+  }
+
+  async function handleDelete(e: MouseEvent, project: Project) {
+    e.preventDefault()
+    e.stopPropagation()
+    if (!window.confirm(`Move "${project.name}" to recycle bin? You can restore it later.`)) return
+    await softDeleteProject(project.id)
+    setProjects((prev) => prev.filter((p) => p.id !== project.id))
+  }
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
@@ -99,10 +116,26 @@ export default function Projects() {
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {projects.map((p) => (
-          <Link key={p.id} to={`/projects/${p.id}`} className="glass-panel p-5 hover:glow-border transition-shadow block">
-            <div className="flex items-center justify-between mb-2">
+          <Link key={p.id} to={`/projects/${p.id}`} className="group relative glass-panel p-5 hover:glow-border transition-shadow block">
+            <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <button
+                onClick={(e) => handleRename(e, p)}
+                className="p-1.5 rounded-lg text-gray-500 hover:text-cyan hover:bg-white/5"
+                title="Rename project"
+              >
+                <Pencil size={14} />
+              </button>
+              <button
+                onClick={(e) => handleDelete(e, p)}
+                className="p-1.5 rounded-lg text-gray-500 hover:text-magenta hover:bg-white/5"
+                title="Delete project"
+              >
+                <Trash2 size={14} />
+              </button>
+            </div>
+            <div className="flex items-center justify-between mb-2 pr-14">
               <h3 className="font-medium truncate">{p.name}</h3>
-              <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-violet/15 text-violet">{p.language}</span>
+              <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-violet/15 text-violet shrink-0">{p.language}</span>
             </div>
             <p className="text-sm text-gray-500 line-clamp-2 min-h-[2.5rem]">{p.description || 'No description'}</p>
             <p className="text-xs text-gray-600 mt-3">Updated {formatDistanceToNow(new Date(p.updated_at), { addSuffix: true })}</p>
