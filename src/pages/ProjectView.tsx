@@ -133,6 +133,8 @@ export default function ProjectView() {
   // --- Upload: a whole folder, preserving its internal structure ---
   async function handleUploadFolder(fileList: FileList) {
     if (!id || !user || !project) return
+    const projectId = id
+    const currentUser = user
     const incoming = Array.from(fileList) as (File & { webkitRelativePath?: string })[]
     const rejected: string[] = []
     const createdFiles: VaultFile[] = []
@@ -154,7 +156,7 @@ export default function ProjectView() {
           parentId = existing.id
           continue
         }
-        const folder = await createFolder({ project_id: id, parent_id: parentId, name: part })
+        const folder = await createFolder({ project_id: projectId, parent_id: parentId, name: part })
         localFolders.push(folder)
         pathToFolderId.set(cumulativePath, folder.id)
         parentId = folder.id
@@ -173,12 +175,12 @@ export default function ProjectView() {
       const folderId = parts.length > 0 ? await ensureFolderPath(parts) : null
       const content = await f.text()
       const file = await createFile({
-        project_id: id,
+        project_id: projectId,
         folder_id: folderId,
         name: fileName,
         language: project.language,
         content,
-        created_by: user.id,
+        created_by: currentUser.id,
       })
       createdFiles.push(file)
     }
