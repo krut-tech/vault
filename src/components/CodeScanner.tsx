@@ -1,0 +1,85 @@
+import { useState } from 'react'
+import { ScanSearch, X, KeyRound, MessageSquareWarning, FileWarning } from 'lucide-react'
+import { scanProject, type ScanFinding } from '../lib/api/scanner'
+
+const ICONS = { secret: KeyRound, todo: MessageSquareWarning, 'large-file': FileWarning }
+const COLORS = { secret: 'text-magenta', todo: 'text-violet', 'large-file': 'text-yellow-400' }
+
+export default function CodeScanner({ projectId, onClose }: { projectId: string; onClose: () => void }) {
+  const [findings, setFindings] = useState<ScanFinding[] | null>(null)
+  const [scanning, setScanning] = useState(false)
+
+  async function runScan() {
+    setScanning(true)
+    try {
+      setFindings(await scanProject(projectId))
+    } finally {
+      setScanning(false)
+    }
+  }
+
+  const secretCount = findings?.filter((f) => f.type === 'secret').length ?? 0
+  const todoCount = findings?.filter((f) => f.type === 'todo').length ?? 0
+  const largeFileCount = findings?.filter((f) => f.type === 'large-file').length ?? 0
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="glass-panel glow-border w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
+          <h2 className="font-semibold text-sm flex items-center gap-1.5"><ScanSearch size={15} /> Code scanner</h2>
+          <button onClick={onClose} className="text-gray-400 hover:text-magenta"><X size={16} /></button>
+        </div>
+
+        <div className="p-5 flex-1 overflow-y-auto space-y-4">
+          {!findings && (
+            <div className="text-center py-8">
+              <p className="text-sm text-gray-400 mb-4">Scans this project's files for exposed secrets, TODO/FIXME markers, and unusually large files.</p>
+              <button onClick={runScan} disabled={scanning} className="btn-primary text-sm">{scanning ? 'Scanning…' : 'Run scan'}</button>
+            </div>
+          )}
+
+          {findings && (
+            <>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="glass-panel p-3 text-center">
+                  <p className="text-xl font-bold text-magenta">{secretCount}</p>
+                  <p className="text-[10px] text-gray-500 uppercase">Possible secrets</p>
+                </div>
+                <div className="glass-panel p-3 text-center">
+                  <p className="text-xl font-bold text-violet">{todoCount}</p>
+                  <p className="text-[10px] text-gray-500 uppercase">TODOs</p>
+                </div>
+                <div className="glass-panel p-3 text-center">
+                  <p className="text-xl font-bold text-yellow-400">{largeFileCount}</p>
+                  <p className="text-[10px] text-gray-500 uppercase">Large files</p>
+                </div>
+              </div>
+
+              {findings.length === 0 && <p className="text-sm text-gray-500 text-center py-4">No findings — looks clean.</p>}
+
+              <div className="space-y-2">
+                {findings.map((f, idx) => {
+                  const Icon = ICONS[f.type]
+                  return (
+                    <div key={idx} className="glass-panel px-3 py-2 flex items-start gap-2.5 text-sm">
+                      <Icon size={14} className={`${COLORS[f.type]} shrink-0 mt-0.5`} />
+                      <div className="min-w-0">
+                        <p className="truncate">
+                          <span className="text-gray-300">{f.fileName}</span>
+                          {f.line && <span className="text-gray-600"> :{f.line}</span>}
+                        </p>
+                        <p className="text-xs text-gray-500 truncate">{f.detail}</p>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+
+              <button onClick={runScan} className="text-xs text-cyan hover:underline">Re-scan</button>
+            </>
+          )}
+        </div>
+      </div>
+    </div>
+  )
+}

@@ -1,0 +1,86 @@
+@import "tailwindcss";
+
+@theme {
+  --color-void: #07070c;
+  --color-abyss: #0d0d16;
+  --color-panel: #12121e;
+  --color-cyan: #2ee6d6;
+  --color-violet: #a855f7;
+  --color-magenta: #ff3ec9;
+  --font-mono: 'JetBrains Mono', 'Fira Code', ui-monospace, monospace;
+  --font-sans: 'Inter', ui-sans-serif, system-ui, sans-serif;
+}
+
+@layer base {
+  html { color-scheme: dark; }
+  body {
+    @apply bg-void text-gray-100 font-sans antialiased;
+    background-image:
+      linear-gradient(rgba(46,230,214,0.035) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(46,230,214,0.035) 1px, transparent 1px);
+    background-size: 42px 42px;
+    background-attachment: fixed;
+  }
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(ellipse 70% 60% at 25% 15%, rgba(46,230,214,0.07), transparent 60%),
+      radial-gradient(ellipse 55% 50% at 80% 85%, rgba(168,85,247,0.06), transparent 60%);
+    z-index: -1;
+  }
+  /* subtle scanline overlay */
+  body::after {
+    content: '';
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(255,255,255,0.012) 0px,
+      rgba(255,255,255,0.012) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+    z-index: -1;
+  }
+  ::selection { background: var(--color-cyan); color: #030308; }
+  *:focus-visible { outline: 2px solid var(--color-cyan); outline-offset: 2px; border-radius: 4px; }
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+      animation-duration: 0.001ms !important;
+      animation-iteration-count: 1 !important;
+      transition-duration: 0.001ms !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-panel/60 backdrop-blur-xl border border-white/10 rounded-2xl;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.02) inset, 0 8px 32px rgba(0,0,0,0.4);
+  }
+  .glow-border {
+    box-shadow: 0 0 0 1px rgba(46,230,214,0.25), 0 0 24px -4px rgba(46,230,214,0.35);
+  }
+  .neon-gradient-text {
+    background: linear-gradient(90deg, var(--color-cyan), var(--color-violet), var(--color-magenta));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .btn-primary {
+    @apply px-4 py-2 rounded-xl font-medium text-void transition-transform duration-150;
+    background: linear-gradient(90deg, var(--color-cyan), var(--color-violet));
+  }
+  .btn-primary:hover { transform: translateY(-1px); filter: brightness(1.08); }
+  .btn-primary:active { transform: translateY(0); }
+  .btn-primary:disabled { opacity: 0.5; transform: none; }
+  .input-field {
+    @apply bg-abyss/80 border border-white/10 rounded-lg px-3 py-2 text-sm text-gray-100 placeholder-gray-500;
+    @apply focus:border-cyan/60 outline-none transition-colors;
+  }
+}
