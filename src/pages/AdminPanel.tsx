@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, ShieldCheck, Upload, Plus, Trash2 } from 'lucide-react'
-import { listTeamMembers, updateMemberRole, type TeamMember } from '../lib/api/admin'
+import { listTeamMembers, updateMemberRole, removeMember, type TeamMember } from '../lib/api/admin'
 import { listActivity } from '../lib/api/activity'
 import { listProjects } from '../lib/api/projects'
 import { uploadLogo } from '../lib/api/branding'
@@ -51,6 +51,16 @@ export default function AdminPanel() {
   async function handleRoleChange(id: string, role: 'owner' | 'admin' | 'member') {
     await updateMemberRole(id, role)
     setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, role } : m)))
+  }
+
+  async function handleRemoveMember(m: TeamMember) {
+    if (!window.confirm(`Remove ${m.full_name ?? m.email} from the team? They won't be able to log in anymore, but their projects/files stay intact.`)) return
+    try {
+      await removeMember(m.id)
+      setMembers((prev) => prev.map((p) => (p.id === m.id ? { ...p, is_active: false } : p)))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to remove member')
+    }
   }
 
   async function handleAddIp(e: FormEvent) {
@@ -181,24 +191,40 @@ export default function AdminPanel() {
       <section className="glass-panel">
         <h3 className="px-5 py-3 border-b border-white/10 font-medium text-sm">Team members</h3>
         <div className="divide-y divide-white/5">
-          {members.map((m) => (
+          {members.filter((m) => m.is_active).map((m) => (
             <div key={m.id} className="flex items-center justify-between px-5 py-3">
               <div className="min-w-0">
                 <p className="text-sm truncate">{m.full_name ?? m.email}</p>
                 <p className="text-xs text-gray-500 truncate">{m.email}</p>
               </div>
-              <select
-                value={m.role}
-                onChange={(e) => handleRoleChange(m.id, e.target.value as 'owner' | 'admin' | 'member')}
-                disabled={m.id === profile?.id && m.role === 'owner'}
-                className="input-field text-xs py-1"
-              >
-                <option value="member">Member</option>
-                <option value="admin">Admin</option>
-                <option value="owner">Owner</option>
-              </select>
+              <div className="flex items-center gap-2 shrink-0">
+                <select
+                  value={m.role}
+                  onChange={(e) => handleRoleChange(m.id, e.target.value as 'owner' | 'admin' | 'member')}
+                  disabled={m.id === profile?.id && m.role === 'owner'}
+                  className="input-field text-xs py-1"
+                >
+                  <option value="member">Member</option>
+                  <option value="admin">Admin</option>
+                  <option value="owner">Owner</option>
+                </select>
+                {m.id !== profile?.id && (
+                  <button
+                    onClick={() => handleRemoveMember(m)}
+                    className="p-1.5 rounded-lg text-gray-500 hover:text-magenta hover:bg-white/5"
+                    title="Remove member"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                )}
+              </div>
             </div>
           ))}
+          {members.filter((m) => !m.is_active).length > 0 && (
+            <p className="px-5 py-2 text-xs text-gray-600">
+              {members.filter((m) => !m.is_active).length} removed member(s) — hidden here, still shown as author on their past work.
+            </p>
+          )}
         </div>
       </section>
 
