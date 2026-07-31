@@ -23,6 +23,11 @@ export async function getProject(id: string) {
   return data as Project
 }
 
+export async function renameProject(id: string, name: string) {
+  const { error } = await supabase.from('projects').update({ name, updated_at: new Date().toISOString() }).eq('id', id)
+  if (error) throw error
+}
+
 export async function softDeleteProject(id: string) {
   const { error } = await supabase.from('projects').update({ is_deleted: true }).eq('id', id)
   if (error) throw error
