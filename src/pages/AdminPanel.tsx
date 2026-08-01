@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ShieldCheck, Upload, Plus, Trash2 } from 'lucide-react'
-import { listTeamMembers, updateMemberRole, removeMember, type TeamMember } from '../lib/api/admin'
+import { ArrowLeft, ShieldCheck, Upload, Plus, Trash2, Mail } from 'lucide-react'
+import { listTeamMembers, updateMemberRole, removeMember, listPendingSignups, approveSignup, type TeamMember } from '../lib/api/admin'
 import { listActivity } from '../lib/api/activity'
 import { listProjects } from '../lib/api/projects'
 import { uploadLogo } from '../lib/api/branding'
@@ -18,6 +18,8 @@ export default function AdminPanel() {
   const user = useAuthStore((s) => s.user)
   const { appName, logoUrl, load, update } = useBrandingStore()
   const [members, setMembers] = useState<TeamMember[]>([])
+  const [pending, setPending] = useState<TeamMember[]>([])
+  const [approvingId, setApprovingId] = useState<string | null>(null)
   const [activity, setActivity] = useState<ActivityRow[]>([])
   const [projectCount, setProjectCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -33,11 +35,12 @@ export default function AdminPanel() {
   const [newIpNote, setNewIpNote] = useState('')
 
   useEffect(() => {
-    Promise.all([listTeamMembers(), listActivity(50), listProjects(), load(), listAllowlist()]).then(([m, a, p, , al]) => {
+    Promise.all([listTeamMembers(), listActivity(50), listProjects(), load(), listAllowlist(), listPendingSignups()]).then(([m, a, p, , al, pd]) => {
       setMembers(m)
       setActivity(a)
       setProjectCount(p.length)
       setAllowlist(al)
+      setPending(pd)
       setLoading(false)
     })
   }, [load])
@@ -47,6 +50,29 @@ export default function AdminPanel() {
   }, [appName])
 
   const isAllowed = profile?.role === 'owner' || profile?.role === 'admin'
+
+  async function handleApprove(m: TeamMember) {
+    setApprovingId(m.id)
+    try {
+      await approveSignup(m.id)
+      setPending((prev) => prev.filter((p) => p.id !== m.id))
+      setMembers((prev) => [...prev, { ...m, is_active: true, approved_at: new Date().toISOString() }])
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to approve')
+    } finally {
+      setApprovingId(null)
+    }
+  }
+
+  async function handleReject(m: TeamMember) {
+    if (!window.confirm(`Reject the signup from ${m.full_name ?? m.email}? They won't be able to log in.`)) return
+    try {
+      await removeMember(m.id)
+      setPending((prev) => prev.filter((p) => p.id !== m.id))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to reject')
+    }
+  }
 
   async function handleRoleChange(id: string, role: 'owner' | 'admin' | 'member') {
     await updateMemberRole(id, role)
@@ -123,11 +149,45 @@ export default function AdminPanel() {
         <h2 className="text-lg font-semibold">Admin panel</h2>
       </div>
 
-      <div className="grid grid-cols-3 gap-4">
-        <StatCard label="Team members" value={members.length} />
+      <div className="grid grid-cols-4 gap-4">
+        <StatCard label="Team members" value={members.filter((m) => m.approved_at && m.is_active).length} />
+        <StatCard label="Pending approval" value={pending.length} />
         <StatCard label="Projects" value={projectCount} />
         <StatCard label="Logged actions" value={activity.length} />
       </div>
+
+      {pending.length > 0 && (
+        <section className="glass-panel">
+          <h3 className="px-5 py-3 border-b border-white/10 font-medium text-sm flex items-center gap-2">
+            <Mail size={14} className="text-cyan" /> Pending approval
+          </h3>
+          <div className="divide-y divide-white/5">
+            {pending.map((p) => (
+              <div key={p.id} className="flex items-center justify-between px-5 py-3">
+                <div className="min-w-0">
+                  <p className="text-sm truncate">{p.full_name ?? p.email}</p>
+                  <p className="text-xs text-gray-500 truncate">{p.email}</p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => handleApprove(p)}
+                    disabled={approvingId === p.id}
+                    className="btn-primary text-xs px-3 py-1.5"
+                  >
+                    {approvingId === p.id ? 'Approving…' : 'Approve'}
+                  </button>
+                  <button
+                    onClick={() => handleReject(p)}
+                    className="text-xs px-3 py-1.5 rounded-lg border border-white/10 text-gray-400 hover:text-magenta hover:border-magenta/40"
+                  >
+                    Reject
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="glass-panel p-6">
         <h3 className="font-medium text-sm mb-4">Branding</h3>
@@ -191,7 +251,7 @@ export default function AdminPanel() {
       <section className="glass-panel">
         <h3 className="px-5 py-3 border-b border-white/10 font-medium text-sm">Team members</h3>
         <div className="divide-y divide-white/5">
-          {members.filter((m) => m.is_active).map((m) => (
+          {members.filter((m) => m.approved_at && m.is_active).map((m) => (
             <div key={m.id} className="flex items-center justify-between px-5 py-3">
               <div className="min-w-0">
                 <p className="text-sm truncate">{m.full_name ?? m.email}</p>
@@ -220,9 +280,9 @@ export default function AdminPanel() {
               </div>
             </div>
           ))}
-          {members.filter((m) => !m.is_active).length > 0 && (
+          {members.filter((m) => m.approved_at && !m.is_active).length > 0 && (
             <p className="px-5 py-2 text-xs text-gray-600">
-              {members.filter((m) => !m.is_active).length} removed member(s) — hidden here, still shown as author on their past work.
+              {members.filter((m) => m.approved_at && !m.is_active).length} removed member(s) — hidden here, still shown as author on their past work.
             </p>
           )}
         </div>

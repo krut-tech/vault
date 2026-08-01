@@ -8,6 +8,7 @@ interface Profile {
   full_name: string | null
   avatar_url: string | null
   role: 'owner' | 'admin' | 'member'
+  approved_at: string | null
 }
 
 interface AuthState {
