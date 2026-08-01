@@ -2,7 +2,7 @@ import { supabase } from '../supabase'
 import type { Json } from '../../types/database'
 
 export async function listNotifications(userId: string) {
-  const { data, error } = await supabase.from('notifications').select('*').eq('user_id', userId).order('created_at', { ascending: false }).limit(50)
+  const { data, error } = await supabase.from('notifications').select('*').eq('user_id', userId).eq('is_read', false).order('created_at', { ascending: false }).limit(50)
   if (error) throw error
   return data
 }

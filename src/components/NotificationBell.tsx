@@ -54,7 +54,7 @@ export default function NotificationBell() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const unreadCount = notifications.filter((n) => !n.is_read).length
+  const unreadCount = notifications.length
 
   if (!user) return null
 
@@ -78,7 +78,7 @@ export default function NotificationBell() {
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
             <span className="text-sm font-medium">Notifications</span>
             {user && unreadCount > 0 && (
-              <button onClick={() => markAllRead(user.id).then(() => setNotifications((p) => p.map((n) => ({ ...n, is_read: true }))))} className="text-xs text-cyan hover:underline">
+              <button onClick={() => markAllRead(user.id).then(() => setNotifications([]))} className="text-xs text-cyan hover:underline">
                 Mark all read
               </button>
             )}
@@ -88,8 +88,8 @@ export default function NotificationBell() {
             <Link
               key={n.id}
               to={n.link ?? '#'}
-              onClick={() => !n.is_read && markNotificationRead(n.id).then(() => setNotifications((p) => p.map((x) => (x.id === n.id ? { ...x, is_read: true } : x))))}
-              className={`block px-4 py-2.5 text-sm border-b border-white/5 hover:bg-white/5 ${n.is_read ? 'text-gray-400' : 'text-gray-100'}`}
+              onClick={() => markNotificationRead(n.id).then(() => setNotifications((p) => p.filter((x) => x.id !== n.id)))}
+              className="block px-4 py-2.5 text-sm border-b border-white/5 hover:bg-white/5 text-gray-100"
             >
               <p>{n.message}</p>
               <p className="text-xs text-gray-500 mt-0.5">{formatDistanceToNow(new Date(n.created_at), { addSuffix: true })}</p>
