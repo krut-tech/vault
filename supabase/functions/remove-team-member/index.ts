@@ -38,7 +38,7 @@ serve(async (req) => {
 
     const adminClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
 
-    const { data: targetProfile } = await adminClient.from('profiles').select('role').eq('id', memberId).single()
+    const { data: targetProfile } = await adminClient.from('profiles').select('role, full_name, email').eq('id', memberId).single()
     if (targetProfile?.role === 'owner') {
       return json({ error: 'Owners cannot be removed' }, 400)
     }
@@ -48,6 +48,24 @@ serve(async (req) => {
 
     const { error: updateErr } = await adminClient.from('profiles').update({ is_active: false }).eq('id', memberId)
     if (updateErr) return json({ error: updateErr.message }, 500)
+
+    // This update runs on the service role, so the profiles table's
+    // notify triggers see no auth.uid() to attribute it to. Insert the
+    // notification directly here instead, using the caller we already
+    // authenticated above.
+    const { data: allProfiles } = await adminClient.from('profiles').select('id').neq('id', userData.user.id)
+    const removedName = targetProfile?.full_name || targetProfile?.email || 'a member'
+    const { data: callerFullProfile } = await adminClient.from('profiles').select('full_name, email').eq('id', userData.user.id).single()
+    const callerName = callerFullProfile?.full_name || callerFullProfile?.email || 'Someone'
+    if (allProfiles?.length) {
+      await adminClient.from('notifications').insert(
+        allProfiles.map((p) => ({
+          user_id: p.id,
+          message: `${callerName} removed ${removedName} from the team`,
+          link: '/admin',
+        })),
+      )
+    }
 
     return json({ ok: true })
   } catch (err) {
