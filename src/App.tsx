@@ -15,6 +15,7 @@ import NotesAndTasks from './pages/NotesAndTasks'
 import ProtectedRoute from './components/ProtectedRoute'
 import SplashScreen, { shouldShowSplash } from './components/SplashScreen'
 import NotificationBell from './components/NotificationBell'
+import ToastContainer from './components/ToastContainer'
 import { useAuthStore } from './store/authStore'
 
 export default function App() {
@@ -32,13 +33,12 @@ export default function App() {
   return (
     <BrowserRouter>
       {/* Mounted once at the root so notifications are visible on every
-          authenticated page, not just the Projects dashboard. Bottom-right
-          keeps it clear of each page's own top header/back-button/etc.
-          Renders nothing when logged out (see NotificationBell's own user
-          guard). */}
-      <div className="fixed bottom-6 right-6 z-[60]">
+          authenticated page, not just the Projects dashboard. Renders
+          nothing when logged out (see NotificationBell's own user guard). */}
+      <div className="fixed top-4 right-4 z-[60]">
         <NotificationBell />
       </div>
+      <ToastContainer />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />

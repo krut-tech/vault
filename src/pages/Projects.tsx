@@ -6,6 +6,7 @@ import { LANGUAGES } from '../types/vault'
 import type { Project } from '../types/vault'
 import { useAuthStore } from '../store/authStore'
 import { useBrandingStore } from '../store/brandingStore'
+import { useToastStore } from '../store/toastStore'
 import { formatDistanceToNow } from 'date-fns'
 import GlobalSearch from '../components/GlobalSearch'
 
@@ -17,6 +18,7 @@ export default function Projects() {
   const profile = useAuthStore((s) => s.profile)
   const signOut = useAuthStore((s) => s.signOut)
   const { appName, logoUrl, load } = useBrandingStore()
+  const pushToast = useToastStore((s) => s.push)
   const navigate = useNavigate()
 
   async function refresh() {
@@ -40,6 +42,7 @@ export default function Projects() {
     if (!name || name.trim() === '' || name === project.name) return
     await renameProject(project.id, name.trim())
     setProjects((prev) => prev.map((p) => (p.id === project.id ? { ...p, name: name.trim() } : p)))
+    pushToast(`Renamed "${project.name}" to "${name.trim()}"`, { type: 'success' })
   }
 
   async function handleDelete(e: MouseEvent, project: Project) {
@@ -48,6 +51,7 @@ export default function Projects() {
     if (!window.confirm(`Move "${project.name}" to recycle bin? You can restore it later.`)) return
     await softDeleteProject(project.id)
     setProjects((prev) => prev.filter((p) => p.id !== project.id))
+    pushToast(`Moved "${project.name}" to recycle bin`, { link: '/recycle-bin', type: 'success' })
   }
 
   return (
@@ -145,7 +149,7 @@ export default function Projects() {
         <CreateProjectModal
           userId={user.id}
           onClose={() => setShowModal(false)}
-          onCreated={(project) => { setShowModal(false); navigate(`/projects/${project.id}`) }}
+          onCreated={(project) => { setShowModal(false); pushToast(`Created "${project.name}"`, { type: 'success' }); navigate(`/projects/${project.id}`) }}
         />
       )}
     </div>

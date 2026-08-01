@@ -3,6 +3,7 @@ import { Bell } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { listNotifications, markAllRead, markNotificationRead } from '../lib/api/activity'
 import { useAuthStore } from '../store/authStore'
+import { useToastStore } from '../store/toastStore'
 import { supabase } from '../lib/supabase'
 import { formatDistanceToNow } from 'date-fns'
 import type { Database } from '../types/database'
@@ -11,6 +12,7 @@ type Notification = Database['public']['Tables']['notifications']['Row']
 
 export default function NotificationBell() {
   const user = useAuthStore((s) => s.user)
+  const pushToast = useToastStore((s) => s.push)
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -22,7 +24,9 @@ export default function NotificationBell() {
     const channel = supabase
       .channel(`notifications-${user.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, (payload) => {
-        setNotifications((prev) => (prev.some((n) => n.id === (payload.new as Notification).id) ? prev : [payload.new as Notification, ...prev]))
+        const n = payload.new as Notification
+        setNotifications((prev) => (prev.some((x) => x.id === n.id) ? prev : [n, ...prev]))
+        pushToast(n.message, { link: n.link })
       })
       .subscribe((status, err) => {
         if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
@@ -70,7 +74,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 bottom-full mb-2 w-80 glass-panel glow-border max-h-96 overflow-y-auto z-50">
+        <div className="absolute right-0 mt-2 w-80 glass-panel glow-border max-h-96 overflow-y-auto z-50">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
             <span className="text-sm font-medium">Notifications</span>
             {user && unreadCount > 0 && (
