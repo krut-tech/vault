@@ -8,7 +8,6 @@ import { useAuthStore } from '../store/authStore'
 import { useBrandingStore } from '../store/brandingStore'
 import { formatDistanceToNow } from 'date-fns'
 import GlobalSearch from '../components/GlobalSearch'
-import NotificationBell from '../components/NotificationBell'
 
 export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([])
@@ -78,7 +77,6 @@ export default function Projects() {
           <Link to="/recycle-bin" className="text-gray-400 hover:text-cyan" title="Recycle bin">
             <Trash2 size={18} />
           </Link>
-          <NotificationBell />
           <Link to="/settings" className="flex items-center gap-2 text-sm text-gray-400 hover:text-cyan">
             {profile?.avatar_url ? (
               <img src={profile.avatar_url} alt="" className="h-6 w-6 rounded-full object-cover" />

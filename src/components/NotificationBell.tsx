@@ -17,19 +17,23 @@ export default function NotificationBell() {
 
   useEffect(() => {
     if (!user) return
-    listNotifications(user.id).then(setNotifications)
+    listNotifications(user.id).then(setNotifications).catch((err) => console.error('Failed to load notifications:', err))
 
     const channel = supabase
       .channel(`notifications-${user.id}`)
       .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'notifications', filter: `user_id=eq.${user.id}` }, (payload) => {
         setNotifications((prev) => (prev.some((n) => n.id === (payload.new as Notification).id) ? prev : [payload.new as Notification, ...prev]))
       })
-      .subscribe()
+      .subscribe((status, err) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('Notifications realtime subscription failed:', status, err)
+        }
+      })
 
     // Fallback: re-fetch every minute in case the realtime socket drops silently
     // (network hiccups, tab suspension, etc.) so notifications never go stale.
     const pollId = window.setInterval(() => {
-      listNotifications(user.id).then(setNotifications)
+      listNotifications(user.id).then(setNotifications).catch((err) => console.error('Failed to refresh notifications:', err))
     }, 60_000)
 
     return () => {
@@ -48,9 +52,15 @@ export default function NotificationBell() {
 
   const unreadCount = notifications.filter((n) => !n.is_read).length
 
+  if (!user) return null
+
   return (
     <div className="relative" ref={ref}>
-      <button onClick={() => setOpen((o) => !o)} className="relative text-gray-400 hover:text-cyan" aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}>
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="relative h-11 w-11 rounded-full glass-panel glow-border flex items-center justify-center text-gray-400 hover:text-cyan shadow-lg"
+        aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
+      >
         <Bell size={18} />
         {unreadCount > 0 && (
           <span className="absolute -top-1.5 -right-1.5 bg-magenta text-[10px] leading-none rounded-full h-4 w-4 flex items-center justify-center text-white">
@@ -60,7 +70,7 @@ export default function NotificationBell() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-80 glass-panel glow-border max-h-96 overflow-y-auto z-50">
+        <div className="absolute right-0 bottom-full mb-2 w-80 glass-panel glow-border max-h-96 overflow-y-auto z-50">
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
             <span className="text-sm font-medium">Notifications</span>
             {user && unreadCount > 0 && (
