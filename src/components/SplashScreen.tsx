@@ -37,14 +37,13 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
     >
       <video
         ref={videoRef}
-        className="absolute inset-0 h-full w-full object-cover opacity-70"
+        className="absolute inset-0 h-full w-full object-cover"
         src="/media/intro.mp4"
         autoPlay
         muted
         playsInline
         aria-hidden="true"
       />
-      <div className="absolute inset-0 bg-void/40" />
       <div className="relative flex flex-col items-center gap-4">
         <h1 className="text-3xl font-bold neon-gradient-text tracking-wide">CodeVault</h1>
         <div className="h-1 w-40 bg-white/10 rounded-full overflow-hidden">
