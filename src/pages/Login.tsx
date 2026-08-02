@@ -87,7 +87,7 @@ export default function Login() {
       <form onSubmit={handleSubmit} className="glass-panel glow-border w-full max-w-sm p-8 space-y-5">
         <div className="flex items-center gap-2.5">
           {logoUrl && <img src={logoUrl} alt="" className="h-8 w-8 rounded-lg object-cover" />}
-          <h1 className="text-2xl font-bold neon-gradient-text">{appName}</h1>
+          <h1 className="text-2xl font-bold neon-gradient-text-animated">{appName}</h1>
         </div>
         <p className="text-sm text-gray-400">Sign in to your team vault</p>
 
