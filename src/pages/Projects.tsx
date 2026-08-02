@@ -59,7 +59,7 @@ export default function Projects() {
       <div className="glass-panel flex items-center justify-between gap-4 px-5 py-3 mb-6">
         <div className="flex items-center gap-2.5 shrink-0">
           {logoUrl && <img src={logoUrl} alt="" className="h-7 w-7 rounded-lg object-cover" />}
-          <h1 className="text-lg font-bold neon-gradient-text">{appName}</h1>
+          <h1 className="text-lg font-bold neon-gradient-text-animated">{appName}</h1>
         </div>
         <GlobalSearch />
         <div className="flex items-center gap-4 shrink-0">

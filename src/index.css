@@ -72,6 +72,14 @@
     background-clip: text;
     color: transparent;
   }
+  .neon-gradient-text-animated {
+    background: linear-gradient(90deg, var(--color-cyan), var(--color-violet), var(--color-magenta), var(--color-cyan));
+    background-size: 300% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: gradient-flow 6s ease-in-out infinite;
+  }
   .btn-primary {
     @apply px-4 py-2 rounded-xl font-medium text-void transition-transform duration-150;
     background: linear-gradient(90deg, var(--color-cyan), var(--color-violet));
@@ -88,4 +96,15 @@
 @keyframes fadeIn {
   from { opacity: 0; transform: translateY(-6px); }
   to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes gradient-flow {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .neon-gradient-text-animated {
+    animation: none;
+  }
 }
