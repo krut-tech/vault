@@ -5,6 +5,7 @@ const SESSION_KEY = 'codevault_splash_shown'
 export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const videoRef = useRef<HTMLVideoElement>(null)
   const [fadingOut, setFadingOut] = useState(false)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   useEffect(() => {
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
@@ -13,11 +14,23 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
       return
     }
 
-    const timeout = setTimeout(finish, 4200) // safety cap even if video is slow to end
     const video = videoRef.current
+
+    // Fallback in case metadata/ended events never fire (e.g. video fails to load)
+    timeoutRef.current = setTimeout(finish, 8000)
+
+    function setSafetyTimeoutFromDuration() {
+      if (!video || !isFinite(video.duration)) return
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      // Give a small buffer after the video's real length so it always finishes playing
+      timeoutRef.current = setTimeout(finish, video.duration * 1000 + 300)
+    }
+
+    video?.addEventListener('loadedmetadata', setSafetyTimeoutFromDuration)
     video?.addEventListener('ended', finish)
     return () => {
-      clearTimeout(timeout)
+      if (timeoutRef.current) clearTimeout(timeoutRef.current)
+      video?.removeEventListener('loadedmetadata', setSafetyTimeoutFromDuration)
       video?.removeEventListener('ended', finish)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -44,24 +57,12 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
         playsInline
         aria-hidden="true"
       />
-      <div className="relative flex flex-col items-center gap-4">
-        <h1 className="text-3xl font-bold neon-gradient-text tracking-wide">CodeVault</h1>
-        <div className="h-1 w-40 bg-white/10 rounded-full overflow-hidden">
-          <div className="h-full bg-gradient-to-r from-cyan to-violet animate-[loadbar_2.8s_ease-in-out_forwards]" />
-        </div>
-      </div>
       <button
         onClick={finish}
         className="absolute bottom-8 right-8 text-xs text-gray-400 hover:text-cyan border border-white/10 rounded-full px-3 py-1.5"
       >
         Skip
       </button>
-      <style>{`
-        @keyframes loadbar {
-          from { width: 0%; }
-          to { width: 100%; }
-        }
-      `}</style>
     </div>
   )
 }
