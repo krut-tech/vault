@@ -1,5 +1,5 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { supabase } from '../lib/supabase'
 
@@ -10,23 +10,38 @@ export default function ResetPassword() {
   const [done, setDone] = useState(false)
   const [submitting, setSubmitting] = useState(false)
   const [ready, setReady] = useState(false)
+  const [verifying, setVerifying] = useState(true)
   const updatePassword = useAuthStore((s) => s.updatePassword)
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
 
   useEffect(() => {
-    // Supabase exchanges the recovery token in the URL for a session automatically
-    // (detectSessionInUrl: true) and fires a PASSWORD_RECOVERY event when ready.
-    const { data: sub } = supabase.auth.onAuthStateChange((event) => {
-      if (event === 'PASSWORD_RECOVERY') setReady(true)
-    })
+    async function verify() {
+      const tokenHash = searchParams.get('token_hash')
+      const type = searchParams.get('type')
 
-    // Fallback: if a session already exists by the time this mounts, allow the form.
-    supabase.auth.getSession().then(({ data }) => {
-      if (data.session) setReady(true)
-    })
+      if (!tokenHash || type !== 'recovery') {
+        // Fallback: maybe an existing recovery session already exists (e.g. old-style link)
+        const { data } = await supabase.auth.getSession()
+        if (data.session) {
+          setReady(true)
+        } else {
+          setError('This reset link is invalid or has expired. Please request a new one.')
+        }
+        setVerifying(false)
+        return
+      }
 
-    return () => sub.subscription.unsubscribe()
-  }, [])
+      const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: 'recovery' })
+      setVerifying(false)
+      if (error) {
+        setError('This reset link is invalid or has expired. Please request a new one.')
+        return
+      }
+      setReady(true)
+    }
+    verify()
+  }, [searchParams])
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
@@ -57,8 +72,12 @@ export default function ResetPassword() {
       <form onSubmit={handleSubmit} className="glass-panel glow-border w-full max-w-sm p-8 space-y-5">
         <h1 className="text-2xl font-bold neon-gradient-text">Set new password</h1>
 
-        {!ready && !done && (
+        {verifying && (
           <p className="text-sm text-gray-400">Verifying your reset link…</p>
+        )}
+
+        {!verifying && error && !ready && (
+          <p role="alert" className="text-sm text-magenta bg-magenta/10 border border-magenta/30 rounded-lg px-3 py-2">{error}</p>
         )}
 
         {ready && !done && (
