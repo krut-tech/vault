@@ -99,6 +99,9 @@ export default function Login() {
         <div className="space-y-2">
           <label htmlFor="password" className="text-xs uppercase tracking-wide text-gray-400">Password</label>
           <input id="password" type="password" required autoComplete="current-password" className="input-field w-full" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <div className="text-right">
+            <Link to="/forgot-password" className="text-xs text-cyan hover:underline">Forgot password?</Link>
+          </div>
         </div>
 
         {error && <p role="alert" className="text-sm text-magenta bg-magenta/10 border border-magenta/30 rounded-lg px-3 py-2">{error}</p>}
