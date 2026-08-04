@@ -1,10 +1,11 @@
 import { useMemo, useRef, useState } from 'react'
-import { Folder as FolderIcon, FolderOpen, FileCode2, Star, Plus, Upload, FolderUp, Download } from 'lucide-react'
-import type { Folder, VaultFile } from '../types/vault'
+import { Folder as FolderIcon, FolderOpen, FileCode2, FileText, Star, Plus, Upload, FolderUp, Download, Trash2 } from 'lucide-react'
+import type { Folder, VaultFile, PdfFile } from '../types/vault'
 
 interface Props {
   folders: Folder[]
   files: VaultFile[]
+  pdfs: PdfFile[]
   activeFileId: string | null
   acceptExtensions: string
   onSelectFile: (file: VaultFile) => void
@@ -12,12 +13,16 @@ interface Props {
   onCreateFile: (folderId: string | null) => void
   onUploadFiles: (folderId: string | null, fileList: FileList) => void
   onUploadFolder: (fileList: FileList) => void
+  onUploadPdf: (folderId: string | null, fileList: FileList) => void
   onDownloadFile: (file: VaultFile) => void
+  onDownloadPdf: (pdf: PdfFile) => void
+  onDeletePdf: (pdf: PdfFile) => void
 }
 
 export default function FileTree({
   folders,
   files,
+  pdfs,
   activeFileId,
   acceptExtensions,
   onSelectFile,
@@ -25,10 +30,13 @@ export default function FileTree({
   onCreateFile,
   onUploadFiles,
   onUploadFolder,
+  onUploadPdf,
   onDownloadFile,
+  onDownloadPdf,
+  onDeletePdf,
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const rootFileInputRef = useRef<HTMLInputElement>(null)
+  const [uploadMenuFor, setUploadMenuFor] = useState<string | null>(null)
   const rootFolderInputRef = useRef<HTMLInputElement>(null)
 
   const childrenOf = useMemo(() => {
@@ -51,6 +59,16 @@ export default function FileTree({
     return map
   }, [files])
 
+  const pdfsOf = useMemo(() => {
+    const map = new Map<string | null, PdfFile[]>()
+    for (const p of pdfs) {
+      const key = p.folder_id
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(p)
+    }
+    return map
+  }, [pdfs])
+
   function toggle(id: string) {
     setExpanded((prev) => {
       const next = new Set(prev)
@@ -59,11 +77,70 @@ export default function FileTree({
     })
   }
 
+  // Dropdown offering "Code file" vs "PDF" upload, used at root and per-folder.
+  function renderUploadMenu(key: string, folderId: string | null) {
+    const codeInputId = `upload-code-${key}`
+    const pdfInputId = `upload-pdf-${key}`
+    const open = uploadMenuFor === key
+
+    return (
+      <div className="relative" onClick={(e) => e.stopPropagation()}>
+        <button
+          onClick={() => setUploadMenuFor(open ? null : key)}
+          className="text-gray-500 hover:text-cyan"
+          title="Upload file"
+        >
+          <Upload size={folderId === null ? 14 : 12} />
+        </button>
+        {open && (
+          <div className="absolute z-20 top-full right-0 mt-1 w-32 glass-panel py-1 text-xs shadow-lg">
+            <label
+              htmlFor={codeInputId}
+              className="block px-3 py-1.5 hover:bg-white/5 cursor-pointer text-gray-300"
+              onClick={() => setUploadMenuFor(null)}
+            >
+              Code file
+            </label>
+            <label
+              htmlFor={pdfInputId}
+              className="block px-3 py-1.5 hover:bg-white/5 cursor-pointer text-gray-300"
+              onClick={() => setUploadMenuFor(null)}
+            >
+              PDF
+            </label>
+            <input
+              id={codeInputId}
+              type="file"
+              multiple
+              accept={acceptExtensions}
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) onUploadFiles(folderId, e.target.files)
+                e.target.value = ''
+              }}
+            />
+            <input
+              id={pdfInputId}
+              type="file"
+              multiple
+              accept="application/pdf,.pdf"
+              className="hidden"
+              onChange={(e) => {
+                if (e.target.files && e.target.files.length > 0) onUploadPdf(folderId, e.target.files)
+                e.target.value = ''
+              }}
+            />
+          </div>
+        )}
+      </div>
+    )
+  }
+
   function renderFolder(folder: Folder, depth: number) {
     const isOpen = expanded.has(folder.id)
     const subFolders = childrenOf.get(folder.id) ?? []
     const subFiles = filesOf.get(folder.id) ?? []
-    const folderInputId = `upload-folder-target-${folder.id}`
+    const subPdfs = pdfsOf.get(folder.id) ?? []
 
     return (
       <div key={folder.id}>
@@ -82,29 +159,15 @@ export default function FileTree({
           >
             <Plus size={13} />
           </button>
-          <label
-            onClick={(e) => e.stopPropagation()}
-            className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-violet cursor-pointer"
-            title="Upload file(s) here"
-          >
-            <Upload size={12} />
-            <input
-              id={folderInputId}
-              type="file"
-              multiple
-              accept={acceptExtensions}
-              className="hidden"
-              onChange={(e) => {
-                if (e.target.files && e.target.files.length > 0) onUploadFiles(folder.id, e.target.files)
-                e.target.value = ''
-              }}
-            />
-          </label>
+          <div className="opacity-0 group-hover:opacity-100">
+            {renderUploadMenu(folder.id, folder.id)}
+          </div>
         </div>
         {isOpen && (
           <div>
             {subFolders.map((f) => renderFolder(f, depth + 1))}
             {subFiles.map((file) => renderFile(file, depth + 1))}
+            {subPdfs.map((pdf) => renderPdf(pdf, depth + 1))}
           </div>
         )}
       </div>
@@ -137,8 +200,38 @@ export default function FileTree({
     )
   }
 
+  function renderPdf(pdf: PdfFile, depth: number) {
+    return (
+      <div
+        key={pdf.id}
+        className="group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm hover:bg-white/5 transition-colors text-gray-300"
+        style={{ paddingLeft: depth * 14 + 8 }}
+      >
+        <button onClick={() => onDownloadPdf(pdf)} className="flex items-center gap-1.5 flex-1 min-w-0 text-left" title="Open PDF">
+          <FileText size={14} className="shrink-0 opacity-70 text-magenta" />
+          <span className="truncate flex-1">{pdf.name}</span>
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDownloadPdf(pdf) }}
+          className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-cyan shrink-0"
+          title="Download PDF"
+        >
+          <Download size={13} />
+        </button>
+        <button
+          onClick={(e) => { e.stopPropagation(); onDeletePdf(pdf) }}
+          className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-magenta shrink-0"
+          title="Delete PDF"
+        >
+          <Trash2 size={13} />
+        </button>
+      </div>
+    )
+  }
+
   const rootFolders = childrenOf.get(null) ?? []
   const rootFiles = filesOf.get(null) ?? []
+  const rootPdfs = pdfsOf.get(null) ?? []
 
   return (
     <div className="glass-panel h-full overflow-y-auto p-2">
@@ -147,23 +240,10 @@ export default function FileTree({
         <div className="flex gap-2.5 items-center">
           <button onClick={() => onCreateFolder(null)} className="text-gray-500 hover:text-cyan text-xs" title="New folder">+ Folder</button>
           <button onClick={() => onCreateFile(null)} className="text-gray-500 hover:text-violet text-xs" title="New file">+ File</button>
-          <button onClick={() => rootFileInputRef.current?.click()} className="text-gray-500 hover:text-cyan" title="Upload file(s)">
-            <Upload size={14} />
-          </button>
+          {renderUploadMenu('root', null)}
           <button onClick={() => rootFolderInputRef.current?.click()} className="text-gray-500 hover:text-violet" title="Upload folder">
             <FolderUp size={14} />
           </button>
-          <input
-            ref={rootFileInputRef}
-            type="file"
-            multiple
-            accept={acceptExtensions}
-            className="hidden"
-            onChange={(e) => {
-              if (e.target.files && e.target.files.length > 0) onUploadFiles(null, e.target.files)
-              e.target.value = ''
-            }}
-          />
           <input
             ref={rootFolderInputRef}
             type="file"
@@ -179,7 +259,8 @@ export default function FileTree({
       </div>
       {rootFolders.map((f) => renderFolder(f, 0))}
       {rootFiles.map((f) => renderFile(f, 0))}
-      {rootFolders.length === 0 && rootFiles.length === 0 && (
+      {rootPdfs.map((p) => renderPdf(p, 0))}
+      {rootFolders.length === 0 && rootFiles.length === 0 && rootPdfs.length === 0 && (
         <p className="px-2 py-4 text-xs text-gray-500">Empty. Create a folder/file, or upload from your computer.</p>
       )}
     </div>

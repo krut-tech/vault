@@ -1,16 +1,16 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, History, Star, Trash2, MessageSquare, Rocket, ScanSearch, FileArchive, FileText } from 'lucide-react'
+import { ArrowLeft, History, Star, Trash2, MessageSquare, Rocket, ScanSearch, FileArchive } from 'lucide-react'
 import CommentsPanel from '../components/CommentsPanel'
 import DeployPanel from '../components/DeployPanel'
 import CodeScanner from '../components/CodeScanner'
-import PdfPanel from '../components/PdfPanel'
 import { logActivity } from '../lib/api/activity'
 import { getProject } from '../lib/api/projects'
 import { listFolders, createFolder } from '../lib/api/folders'
 import { listFiles, createFile, toggleFavorite, softDeleteFile, getFile } from '../lib/api/files'
+import { listPdfs, uploadPdf, deletePdf, getPdfUrl } from '../lib/api/pdfs'
 import { matchesProjectLanguage, acceptForLanguage } from '../lib/languageMap'
-import type { Project, Folder, VaultFile } from '../types/vault'
+import type { Project, Folder, VaultFile, PdfFile } from '../types/vault'
 import FileTree from '../components/FileTree'
 import CodeEditor from '../components/CodeEditor'
 import VersionHistory from '../components/VersionHistory'
@@ -29,7 +29,7 @@ export default function ProjectView() {
   const [showComments, setShowComments] = useState(false)
   const [showDeploy, setShowDeploy] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
-  const [showPdfs, setShowPdfs] = useState(false)
+  const [pdfs, setPdfs] = useState<PdfFile[]>([])
   const [loading, setLoading] = useState(true)
   const [zipping, setZipping] = useState(false)
 
@@ -37,10 +37,11 @@ export default function ProjectView() {
     if (!id) return
     setLoading(true)
     try {
-      const [p, f, fl] = await Promise.all([getProject(id), listFolders(id), listFiles(id)])
+      const [p, f, fl, pf] = await Promise.all([getProject(id), listFolders(id), listFiles(id), listPdfs(id)])
       setProject(p)
       setFolders(f)
       setFiles(fl)
+      setPdfs(pf)
     } finally {
       setLoading(false)
     }
@@ -209,6 +210,37 @@ export default function ProjectView() {
     URL.revokeObjectURL(url)
   }
 
+  // --- PDFs: uploaded/listed/deleted separately from code files, shown in the same tree ---
+  async function handleUploadPdf(folderId: string | null, fileList: FileList) {
+    if (!id || !user) return
+    const incoming = Array.from(fileList)
+    const uploaded: PdfFile[] = []
+    for (const file of incoming) {
+      if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) continue
+      try {
+        const pdf = await uploadPdf({ project_id: id, folder_id: folderId, file, uploaded_by: user.id })
+        uploaded.push(pdf)
+      } catch (err) {
+        console.error('PDF upload failed', err)
+      }
+    }
+    if (uploaded.length > 0) {
+      setPdfs((prev) => [...prev, ...uploaded])
+      void logActivity(user.id, 'uploaded', 'pdf', uploaded[0].id, { count: uploaded.length, project_id: id })
+    }
+  }
+
+  function handleDownloadPdf(pdf: PdfFile) {
+    window.open(getPdfUrl(pdf.storage_path), '_blank')
+  }
+
+  async function handleDeletePdf(pdf: PdfFile) {
+    if (!window.confirm(`Delete "${pdf.name}"?`)) return
+    await deletePdf(pdf)
+    setPdfs((prev) => prev.filter((p) => p.id !== pdf.id))
+    if (user) void logActivity(user.id, 'deleted', 'pdf', pdf.id, { name: pdf.name, project_id: id })
+  }
+
   function folderPath(folderId: string | null): string {
     if (!folderId) return ''
     const parts: string[] = []
@@ -289,9 +321,6 @@ export default function ProjectView() {
           <button onClick={() => setShowScanner(true)} className="text-gray-400 hover:text-violet flex items-center gap-1 text-xs" title="Code scanner">
             <ScanSearch size={14} /> Scan
           </button>
-          <button onClick={() => setShowPdfs(true)} className="text-gray-400 hover:text-cyan flex items-center gap-1 text-xs" title="PDF documents">
-            <FileText size={14} /> PDFs
-          </button>
           <button
             onClick={handleDownloadZip}
             disabled={zipping || files.length === 0}
@@ -323,6 +352,7 @@ export default function ProjectView() {
         <FileTree
           folders={folders}
           files={files}
+          pdfs={pdfs}
           activeFileId={activeFile?.id ?? null}
           acceptExtensions={acceptForLanguage(project.language)}
           onSelectFile={setActiveFile}
@@ -330,7 +360,10 @@ export default function ProjectView() {
           onCreateFile={handleCreateFile}
           onUploadFiles={handleUploadFiles}
           onUploadFolder={handleUploadFolder}
+          onUploadPdf={handleUploadPdf}
           onDownloadFile={handleDownloadFile}
+          onDownloadPdf={handleDownloadPdf}
+          onDeletePdf={handleDeletePdf}
         />
 
         {activeFile && user ? (
@@ -357,7 +390,6 @@ export default function ProjectView() {
       {showDeploy && id && <DeployPanel projectId={id} onClose={() => setShowDeploy(false)} />}
 
       {showScanner && id && <CodeScanner projectId={id} onClose={() => setShowScanner(false)} />}
-      {showPdfs && id && <PdfPanel projectId={id} onClose={() => setShowPdfs(false)} />}
     </div>
   )
 }
