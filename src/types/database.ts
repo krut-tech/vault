@@ -45,6 +45,12 @@ export interface Database {
         Update: Partial<Database['public']['Tables']['files']['Insert']>
         Relationships: []
       }
+      pdf_files: {
+        Row: { id: string; project_id: string; folder_id: string | null; name: string; storage_path: string; size_bytes: number; uploaded_by: string | null; created_at: string }
+        Insert: { id?: string; project_id: string; folder_id?: string | null; name: string; storage_path: string; size_bytes: number; uploaded_by?: string | null; created_at?: string }
+        Update: Partial<Database['public']['Tables']['pdf_files']['Insert']>
+        Relationships: []
+      }
       file_versions: {
         Row: { id: string; file_id: string; content: string; created_by: string; created_at: string }
         Insert: { id?: string; file_id: string; content: string; created_by: string; created_at?: string }

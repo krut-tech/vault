@@ -40,6 +40,17 @@ export interface FileVersion {
   created_at: string
 }
 
+export interface PdfFile {
+  id: string
+  project_id: string
+  folder_id: string | null
+  name: string
+  storage_path: string
+  size_bytes: number
+  uploaded_by: string | null
+  created_at: string
+}
+
 export const LANGUAGES = [
   'javascript', 'typescript', 'python', 'php', 'java', 'c', 'cpp',
   'csharp', 'go', 'rust', 'html', 'css', 'sql', 'json', 'yaml',

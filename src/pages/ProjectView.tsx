@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, History, Star, Trash2, MessageSquare, Rocket, ScanSearch, FileArchive } from 'lucide-react'
+import { ArrowLeft, History, Star, Trash2, MessageSquare, Rocket, ScanSearch, FileArchive, FileText } from 'lucide-react'
 import CommentsPanel from '../components/CommentsPanel'
 import DeployPanel from '../components/DeployPanel'
 import CodeScanner from '../components/CodeScanner'
+import PdfPanel from '../components/PdfPanel'
 import { logActivity } from '../lib/api/activity'
 import { getProject } from '../lib/api/projects'
 import { listFolders, createFolder } from '../lib/api/folders'
@@ -28,6 +29,7 @@ export default function ProjectView() {
   const [showComments, setShowComments] = useState(false)
   const [showDeploy, setShowDeploy] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
+  const [showPdfs, setShowPdfs] = useState(false)
   const [loading, setLoading] = useState(true)
   const [zipping, setZipping] = useState(false)
 
@@ -287,6 +289,9 @@ export default function ProjectView() {
           <button onClick={() => setShowScanner(true)} className="text-gray-400 hover:text-violet flex items-center gap-1 text-xs" title="Code scanner">
             <ScanSearch size={14} /> Scan
           </button>
+          <button onClick={() => setShowPdfs(true)} className="text-gray-400 hover:text-cyan flex items-center gap-1 text-xs" title="PDF documents">
+            <FileText size={14} /> PDFs
+          </button>
           <button
             onClick={handleDownloadZip}
             disabled={zipping || files.length === 0}
@@ -352,6 +357,7 @@ export default function ProjectView() {
       {showDeploy && id && <DeployPanel projectId={id} onClose={() => setShowDeploy(false)} />}
 
       {showScanner && id && <CodeScanner projectId={id} onClose={() => setShowScanner(false)} />}
+      {showPdfs && id && <PdfPanel projectId={id} onClose={() => setShowPdfs(false)} />}
     </div>
   )
 }
