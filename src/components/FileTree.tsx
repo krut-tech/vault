@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Folder as FolderIcon, FolderOpen, FileCode2, FileText, Star, Plus, Upload, FolderUp, Download, Trash2 } from 'lucide-react'
 import type { Folder, VaultFile, PdfFile } from '../types/vault'
 
@@ -38,6 +38,19 @@ export default function FileTree({
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [uploadMenuFor, setUploadMenuFor] = useState<string | null>(null)
   const rootFolderInputRef = useRef<HTMLInputElement>(null)
+  const menuContainerRef = useRef<HTMLDivElement>(null)
+
+  // Close the upload dropdown when clicking anywhere outside it (it was never closing before).
+  useEffect(() => {
+    if (!uploadMenuFor) return
+    function handleClickOutside(e: MouseEvent) {
+      if (menuContainerRef.current && !menuContainerRef.current.contains(e.target as Node)) {
+        setUploadMenuFor(null)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [uploadMenuFor])
 
   const childrenOf = useMemo(() => {
     const map = new Map<string | null, Folder[]>()
@@ -84,7 +97,11 @@ export default function FileTree({
     const open = uploadMenuFor === key
 
     return (
-      <div className="relative" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="relative"
+        ref={open ? menuContainerRef : undefined}
+        onClick={(e) => e.stopPropagation()}
+      >
         <button
           onClick={() => setUploadMenuFor(open ? null : key)}
           className="text-gray-500 hover:text-cyan"
@@ -93,17 +110,17 @@ export default function FileTree({
           <Upload size={folderId === null ? 14 : 12} />
         </button>
         {open && (
-          <div className="absolute z-20 top-full right-0 mt-1 w-32 glass-panel py-1 text-xs shadow-lg">
+          <div className="absolute z-50 top-full right-0 mt-1 w-36 bg-panel border border-white/15 rounded-xl py-1 text-xs shadow-2xl">
             <label
               htmlFor={codeInputId}
-              className="block px-3 py-1.5 hover:bg-white/5 cursor-pointer text-gray-300"
+              className="block px-3 py-1.5 hover:bg-white/10 cursor-pointer text-gray-200"
               onClick={() => setUploadMenuFor(null)}
             >
               Code file
             </label>
             <label
               htmlFor={pdfInputId}
-              className="block px-3 py-1.5 hover:bg-white/5 cursor-pointer text-gray-300"
+              className="block px-3 py-1.5 hover:bg-white/10 cursor-pointer text-gray-200"
               onClick={() => setUploadMenuFor(null)}
             >
               PDF
