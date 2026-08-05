@@ -101,7 +101,7 @@ export default function Login() {
     let rafId = 0
     let gen = 0
     const PHASES = [
-      'is-playing', 'p-jam', 'p-b1', 'p-b2', 'p-b3', 'p-open', 'p-reveal', 'p-close',
+      'is-playing', 'p-jam', 'p-b1', 'p-b2', 'p-b3', 'p-granted', 'p-open', 'p-reveal', 'p-close',
       's-shiver1', 's-shiver2', 's-shiver3',
     ]
 
@@ -206,7 +206,7 @@ export default function Login() {
       passInput!.blur()
 
       if (prefersReduced()) {
-        root!.classList.add('is-playing', 'p-b1', 'p-b2', 'p-b3', 'p-open', 'p-reveal')
+        root!.classList.add('is-playing', 'p-b1', 'p-b2', 'p-b3', 'p-granted', 'p-open', 'p-reveal')
         at(80, () => {
           live!.textContent = 'Access granted'
         })
@@ -231,11 +231,12 @@ export default function Login() {
         root!.classList.add('p-b3')
         shiver(3)
       })
-      at(3300, () => root!.classList.add('p-open'))
-      at(4200, () => {
-        root!.classList.add('p-reveal')
+      at(3100, () => {
+        root!.classList.add('p-granted')
         live!.textContent = 'Access granted'
       })
+      at(3300, () => root!.classList.add('p-open'))
+      at(4200, () => root!.classList.add('p-reveal'))
       at(5200, () => {
         if (myGen !== gen) return
         navigate('/', { replace: true })
@@ -341,12 +342,28 @@ export default function Login() {
             <div className="vdp-shadow" aria-hidden="true"></div>
             <div className="vdp-interior" aria-hidden="true">
               <div className="vdp-room"></div>
-              <div className="vdp-bars">
-                <span className="vdp-bar vdp-bar-1"></span>
-                <span className="vdp-bar vdp-bar-2"></span>
-                <span className="vdp-bar vdp-bar-3"></span>
-                <span className="vdp-bar vdp-bar-4"></span>
-                <span className="vdp-bar vdp-bar-5"></span>
+              <div className="vdp-dashboard">
+                <div className="vdp-dash-topbar">
+                  <span className="vdp-dash-dot vdp-dash-dot-r"></span>
+                  <span className="vdp-dash-dot vdp-dash-dot-y"></span>
+                  <span className="vdp-dash-dot vdp-dash-dot-g"></span>
+                  <span className="vdp-dash-title">CodeVault</span>
+                </div>
+                <div className="vdp-dash-body">
+                  <div className="vdp-dash-sidebar">
+                    <span className="vdp-dash-nav vdp-dash-nav-active"></span>
+                    <span className="vdp-dash-nav"></span>
+                    <span className="vdp-dash-nav"></span>
+                    <span className="vdp-dash-nav"></span>
+                  </div>
+                  <div className="vdp-dash-main">
+                    <div className="vdp-dash-card"></div>
+                    <div className="vdp-dash-card"></div>
+                    <div className="vdp-dash-row vdp-dash-row-1"></div>
+                    <div className="vdp-dash-row vdp-dash-row-2"></div>
+                    <div className="vdp-dash-row vdp-dash-row-3"></div>
+                  </div>
+                </div>
               </div>
               <div className="vdp-barsweep"></div>
               <div className="vdp-glow"></div>
@@ -558,39 +575,95 @@ export default function Login() {
             repeating-linear-gradient(0deg, rgba(255, 255, 255, 0.016) 0 1px, rgba(0, 0, 0, 0) 1px 22px);
         }
 
-        .vdp-bars {
+        .vdp-dashboard {
           position: absolute;
-          right: 22px;
-          bottom: 16px;
-          width: 128px;
-          height: 62px;
-          filter: brightness(0.32);
+          right: 18px;
+          bottom: 14px;
+          width: 184px;
+          height: 118px;
+          border-radius: 10px;
+          overflow: hidden;
+          background: linear-gradient(160deg, rgba(20, 14, 36, 0.94) 0%, rgba(10, 9, 20, 0.97) 100%);
+          border: 1px solid rgba(124, 214, 255, 0.25);
+          box-shadow:
+            0 0 0 1px rgba(0, 0, 0, 0.4),
+            0 10px 26px rgba(0, 0, 0, 0.55),
+            inset 0 1px 0 rgba(255, 255, 255, 0.06);
+          filter: brightness(0.26);
           transition: filter 1s cubic-bezier(0.3, 0.6, 0.3, 1) 0.25s;
         }
 
-        .vdp-bar {
-          position: absolute;
-          width: 58px;
-          height: 18px;
-          border-radius: 3px;
-          background: linear-gradient(180deg, #f0c968 0%, #cf9c3a 46%, #8f671f 100%);
-          box-shadow:
-            inset 0 1.5px 0 rgba(255, 240, 190, 0.75),
-            inset 0 -2px 2px rgba(60, 38, 6, 0.55),
-            0 3px 5px rgba(0, 0, 0, 0.5);
+        .vdp-dash-topbar {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          height: 16px;
+          padding: 0 7px;
+          background: linear-gradient(90deg, rgba(34, 211, 238, 0.18), rgba(167, 90, 255, 0.18));
+          border-bottom: 1px solid rgba(255, 255, 255, 0.06);
         }
-        .vdp-bar::after {
-          content: "";
-          position: absolute;
-          inset: 3px 7px;
+        .vdp-dash-dot { width: 4px; height: 4px; border-radius: 50%; }
+        .vdp-dash-dot-r { background: #ff6767; }
+        .vdp-dash-dot-y { background: #ffcf5c; }
+        .vdp-dash-dot-g { background: #59e07a; }
+        .vdp-dash-title {
+          margin-left: 4px;
+          font-size: 7px;
+          font-weight: 700;
+          letter-spacing: 0.05em;
+          background: linear-gradient(90deg, #7cd6ff, #c084fc);
+          -webkit-background-clip: text;
+          background-clip: text;
+          color: transparent;
+        }
+
+        .vdp-dash-body {
+          display: flex;
+          height: calc(100% - 16px);
+        }
+
+        .vdp-dash-sidebar {
+          width: 28px;
+          display: flex;
+          flex-direction: column;
+          gap: 6px;
+          align-items: center;
+          padding-top: 8px;
+          background: rgba(255, 255, 255, 0.03);
+          border-right: 1px solid rgba(255, 255, 255, 0.05);
+        }
+        .vdp-dash-nav {
+          width: 14px;
+          height: 4px;
           border-radius: 2px;
-          border: 1px solid rgba(90, 60, 12, 0.4);
+          background: rgba(255, 255, 255, 0.12);
         }
-        .vdp-bar-1 { left: 2px;  bottom: 0; }
-        .vdp-bar-2 { left: 64px; bottom: 0; }
-        .vdp-bar-3 { left: 20px; bottom: 20px; transform: rotate(-1.2deg); }
-        .vdp-bar-4 { left: 66px; bottom: 20px; width: 54px; transform: rotate(1.6deg); }
-        .vdp-bar-5 { left: 40px; bottom: 40px; transform: rotate(-2deg); }
+        .vdp-dash-nav-active {
+          background: linear-gradient(90deg, #22d3ee, #a75aff);
+          box-shadow: 0 0 6px rgba(124, 214, 255, 0.6);
+        }
+
+        .vdp-dash-main {
+          flex: 1;
+          padding: 7px 8px;
+          display: flex;
+          flex-direction: column;
+          gap: 5px;
+        }
+        .vdp-dash-card {
+          height: 20px;
+          border-radius: 5px;
+          background: linear-gradient(135deg, rgba(34, 211, 238, 0.16), rgba(167, 90, 255, 0.12));
+          border: 1px solid rgba(255, 255, 255, 0.08);
+        }
+        .vdp-dash-row {
+          height: 7px;
+          border-radius: 3px;
+          background: rgba(255, 255, 255, 0.08);
+        }
+        .vdp-dash-row-1 { width: 100%; }
+        .vdp-dash-row-2 { width: 80%; }
+        .vdp-dash-row-3 { width: 55%; }
 
         .vdp-barsweep {
           position: absolute;
@@ -805,9 +878,11 @@ export default function Login() {
           88% { transform: translate(0, 1.2px); }
         }
 
+        .vdp-root.p-granted .vdp-granted { opacity: 1; transform: translateY(0); }
+
         .vdp-root.p-open .vdp-door { transform: rotateY(-62deg); }
         .vdp-root.p-open .vdp-glow { opacity: 1; }
-        .vdp-root.p-open .vdp-bars { filter: brightness(1); }
+        .vdp-root.p-open .vdp-dashboard { filter: brightness(1); }
 
         .vdp-root.p-reveal .vdp-barsweep {
           animation: vdp-sweep 1.5s cubic-bezier(0.4, 0.1, 0.3, 1) forwards;
@@ -818,14 +893,13 @@ export default function Login() {
           82% { opacity: 1; }
           100% { transform: translateX(150px); opacity: 0; }
         }
-        .vdp-root.p-reveal .vdp-granted { opacity: 1; transform: translateY(0); }
 
         .vdp-root.p-close .vdp-door {
           transform: rotateY(0.001deg);
           transition: transform 0.92s cubic-bezier(0.62, 0.02, 0.34, 1);
         }
         .vdp-root.p-close .vdp-glow { opacity: 0; transition: opacity 0.55s ease 0.3s; }
-        .vdp-root.p-close .vdp-bars { filter: brightness(0.32); transition: filter 0.5s ease; }
+        .vdp-root.p-close .vdp-dashboard { filter: brightness(0.26); transition: filter 0.5s ease; }
         .vdp-root.p-close .vdp-granted { opacity: 0; transform: translateY(8px); transition: opacity 0.3s ease; }
 
         .vdp-form {
