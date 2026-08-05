@@ -310,28 +310,28 @@ export default function ProjectView() {
 
   return (
     <div className="h-screen flex flex-col">
-      <header className="glass-panel m-4 mb-2 flex items-center justify-between px-5 py-3">
-        <div className="flex items-center gap-3">
-          <Link to="/" className="text-gray-400 hover:text-cyan"><ArrowLeft size={18} /></Link>
-          <h1 className="font-semibold">{project.name}</h1>
-          <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-violet/15 text-violet">{project.language}</span>
-          <button onClick={() => setShowDeploy(true)} className="text-gray-400 hover:text-cyan flex items-center gap-1 text-xs ml-2" title="Deploy">
-            <Rocket size={14} /> Deploy
+      <header className="glass-panel m-3 sm:m-4 mb-2 flex flex-wrap items-center gap-y-2 justify-between gap-x-3 px-4 sm:px-5 py-3 pr-16 sm:pr-5">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 min-w-0">
+          <Link to="/" className="text-gray-400 hover:text-cyan shrink-0"><ArrowLeft size={18} /></Link>
+          <h1 className="font-semibold truncate max-w-[9rem] sm:max-w-none">{project.name}</h1>
+          <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-violet/15 text-violet shrink-0">{project.language}</span>
+          <button onClick={() => setShowDeploy(true)} className="text-gray-400 hover:text-cyan flex items-center gap-1 text-xs sm:ml-2 shrink-0" title="Deploy">
+            <Rocket size={14} /> <span className="hidden sm:inline">Deploy</span>
           </button>
-          <button onClick={() => setShowScanner(true)} className="text-gray-400 hover:text-violet flex items-center gap-1 text-xs" title="Code scanner">
-            <ScanSearch size={14} /> Scan
+          <button onClick={() => setShowScanner(true)} className="text-gray-400 hover:text-violet flex items-center gap-1 text-xs shrink-0" title="Code scanner">
+            <ScanSearch size={14} /> <span className="hidden sm:inline">Scan</span>
           </button>
           <button
             onClick={handleDownloadZip}
             disabled={zipping || files.length === 0}
-            className="text-gray-400 hover:text-cyan flex items-center gap-1 text-xs disabled:opacity-40"
+            className="text-gray-400 hover:text-cyan flex items-center gap-1 text-xs disabled:opacity-40 shrink-0"
             title="Download whole project as ZIP"
           >
-            <FileArchive size={14} /> {zipping ? 'Zipping…' : 'Download ZIP'}
+            <FileArchive size={14} /> <span className="hidden sm:inline">{zipping ? 'Zipping…' : 'Download ZIP'}</span>
           </button>
         </div>
         {activeFile && (
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 shrink-0">
             <button onClick={handleToggleFavorite} className="text-gray-400 hover:text-violet" title="Toggle favorite">
               <Star size={16} className={activeFile.is_favorite ? 'fill-violet text-violet' : ''} />
             </button>
@@ -348,28 +348,32 @@ export default function ProjectView() {
         )}
       </header>
 
-      <div className="flex-1 min-h-0 grid grid-cols-[260px_1fr] gap-2 px-4 pb-4">
-        <FileTree
-          folders={folders}
-          files={files}
-          pdfs={pdfs}
-          activeFileId={activeFile?.id ?? null}
-          acceptExtensions={acceptForLanguage(project.language)}
-          onSelectFile={setActiveFile}
-          onCreateFolder={handleCreateFolder}
-          onCreateFile={handleCreateFile}
-          onUploadFiles={handleUploadFiles}
-          onUploadFolder={handleUploadFolder}
-          onUploadPdf={handleUploadPdf}
-          onDownloadFile={handleDownloadFile}
-          onDownloadPdf={handleDownloadPdf}
-          onDeletePdf={handleDeletePdf}
-        />
+      <div className="flex-1 min-h-0 flex flex-col md:grid md:grid-cols-[260px_1fr] gap-2 px-3 sm:px-4 pb-4 overflow-y-auto md:overflow-visible">
+        <div className="h-56 md:h-auto shrink-0 md:shrink">
+          <FileTree
+            folders={folders}
+            files={files}
+            pdfs={pdfs}
+            activeFileId={activeFile?.id ?? null}
+            acceptExtensions={acceptForLanguage(project.language)}
+            onSelectFile={setActiveFile}
+            onCreateFolder={handleCreateFolder}
+            onCreateFile={handleCreateFile}
+            onUploadFiles={handleUploadFiles}
+            onUploadFolder={handleUploadFolder}
+            onUploadPdf={handleUploadPdf}
+            onDownloadFile={handleDownloadFile}
+            onDownloadPdf={handleDownloadPdf}
+            onDeletePdf={handleDeletePdf}
+          />
+        </div>
 
         {activeFile && user ? (
-          <CodeEditor key={activeFile.id} fileId={activeFile.id} initialContent={activeFile.content} language={activeFile.language} userId={user.id} />
+          <div className="min-h-[60vh] md:min-h-0">
+            <CodeEditor key={activeFile.id} fileId={activeFile.id} initialContent={activeFile.content} language={activeFile.language} userId={user.id} />
+          </div>
         ) : (
-          <div className="glass-panel flex items-center justify-center text-gray-500 text-sm">
+          <div className="glass-panel flex items-center justify-center text-gray-500 text-sm min-h-[40vh] md:min-h-0">
             Select or create a file to start editing.
           </div>
         )}

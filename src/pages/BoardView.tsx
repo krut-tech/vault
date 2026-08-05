@@ -94,8 +94,8 @@ export default function BoardView() {
   if (!board) return <div className="p-6 text-gray-400">Board not found.</div>
 
   return (
-    <div className="p-6 h-screen flex flex-col">
-      <div className="flex items-center justify-between mb-4">
+    <div className="p-3 sm:p-6 h-screen flex flex-col">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4 pr-14 sm:pr-0">
         <div className="flex items-center gap-3">
           <Link to="/boards" className="text-gray-400 hover:text-cyan"><ArrowLeft size={18} /></Link>
           <h2 className="text-lg font-semibold">{board.name}</h2>
@@ -169,7 +169,7 @@ function TaskCard({ task, onDelete, dragging }: { task: Task; onDelete: () => vo
     >
       <div className="flex items-start justify-between gap-2">
         <p className="break-words">{task.title}</p>
-        <button onClick={(e) => { e.stopPropagation(); onDelete() }} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-magenta shrink-0">
+        <button onClick={(e) => { e.stopPropagation(); onDelete() }} className="opacity-100 md:opacity-0 md:group-hover:opacity-100 text-gray-500 hover:text-magenta shrink-0">
           <Trash2 size={13} />
         </button>
       </div>

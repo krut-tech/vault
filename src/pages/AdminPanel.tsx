@@ -144,12 +144,12 @@ export default function AdminPanel() {
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 pr-14 sm:pr-0">
         <Link to="/" className="text-gray-400 hover:text-cyan"><ArrowLeft size={18} /></Link>
         <h2 className="text-lg font-semibold">Admin panel</h2>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         <StatCard label="Team members" value={members.filter((m) => m.approved_at && m.is_active).length} />
         <StatCard label="Pending approval" value={pending.length} />
         <StatCard label="Projects" value={projectCount} />

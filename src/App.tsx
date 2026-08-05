@@ -37,7 +37,7 @@ export default function App() {
       {/* Mounted once at the root so notifications are visible on every
           authenticated page, not just the Projects dashboard. Renders
           nothing when logged out (see NotificationBell's own user guard). */}
-      <div className="fixed top-4 right-4 z-[60]">
+      <div className="fixed top-3 right-3 sm:top-4 sm:right-4 z-[60]">
         <NotificationBell />
       </div>
       <ToastContainer />
