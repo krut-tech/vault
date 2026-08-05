@@ -97,14 +97,12 @@ export default function FileTree({
             <label
               htmlFor={codeInputId}
               className="block px-3 py-1.5 hover:bg-white/5 cursor-pointer text-gray-300"
-              onClick={() => setUploadMenuFor(null)}
             >
               Code file
             </label>
             <label
               htmlFor={pdfInputId}
               className="block px-3 py-1.5 hover:bg-white/5 cursor-pointer text-gray-300"
-              onClick={() => setUploadMenuFor(null)}
             >
               PDF
             </label>
@@ -117,6 +115,7 @@ export default function FileTree({
               onChange={(e) => {
                 if (e.target.files && e.target.files.length > 0) onUploadFiles(folderId, e.target.files)
                 e.target.value = ''
+                setUploadMenuFor(null)
               }}
             />
             <input
@@ -128,6 +127,7 @@ export default function FileTree({
               onChange={(e) => {
                 if (e.target.files && e.target.files.length > 0) onUploadPdf(folderId, e.target.files)
                 e.target.value = ''
+                setUploadMenuFor(null)
               }}
             />
           </div>
