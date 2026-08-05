@@ -21,6 +21,7 @@ export default function Login() {
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    if (submitting) return
     setError(null)
     setSubmitting(true)
     const { error } = await signIn(email, password)
@@ -41,6 +42,7 @@ export default function Login() {
 
   async function handleMfaSubmit(e: FormEvent) {
     e.preventDefault()
+    if (submitting) return
     setError(null)
     setSubmitting(true)
     try {
@@ -74,9 +76,10 @@ export default function Login() {
             onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
           />
           {error && <p role="alert" className="text-sm text-magenta bg-magenta/10 border border-magenta/30 rounded-lg px-3 py-2">{error}</p>}
-          <button type="submit" disabled={submitting} className="btn-primary w-full">
+          <button type="submit" disabled={submitting} className="btn-primary w-full sm:hidden">
             {submitting ? 'Verifying…' : 'Verify'}
           </button>
+          <p className="hidden sm:block text-center text-xs text-gray-500">Press <kbd className="px-1.5 py-0.5 rounded bg-white/10 border border-white/10">Enter</kbd> to verify</p>
         </form>
       </div>
     )
@@ -106,9 +109,12 @@ export default function Login() {
 
         {error && <p role="alert" className="text-sm text-magenta bg-magenta/10 border border-magenta/30 rounded-lg px-3 py-2">{error}</p>}
 
-        <button type="submit" disabled={submitting} className="btn-primary w-full">
+        <button type="submit" disabled={submitting} className="btn-primary w-full sm:hidden">
           {submitting ? 'Signing in…' : 'Sign in'}
         </button>
+        <p className="hidden sm:block text-center text-xs text-gray-500">
+          Press <kbd className="px-1.5 py-0.5 rounded bg-white/10 border border-white/10">Enter</kbd> to sign in
+        </p>
 
         <p className="text-sm text-gray-400 text-center">
           No account? <Link to="/signup" className="text-cyan hover:underline">Create one</Link>
