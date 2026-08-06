@@ -905,7 +905,7 @@ export default function Login() {
         .vdp-form {
           position: absolute;
           left: 26px;
-          top: 28px;
+          top: 16px;
           width: 138px;
         }
 
@@ -919,18 +919,18 @@ export default function Login() {
         }
 
         .vdp-label-2 {
-          margin-top: 6px;
+          margin-top: 4px;
         }
 
         .vdp-input {
           display: block;
           width: 100%;
-          margin-top: 6px;
-          padding: 4px 2px 6px;
+          margin-top: 4px;
+          padding: 3px 2px 4px;
           border: 0;
           background: transparent;
           color: #e6ebf2;
-          font-size: 17px;
+          font-size: 16px;
           letter-spacing: 0.14em;
           font-family: inherit;
           caret-color: var(--vdp-amber);
@@ -976,10 +976,10 @@ export default function Login() {
         }
 
         .vdp-gearbox {
-          margin-top: 8px;
+          margin-top: 4px;
           width: 100px;
-          height: 42px;
-          padding: 4px;
+          height: 38px;
+          padding: 2px;
           border-radius: 9px;
           background: linear-gradient(180deg, #141920, #1b212a);
           box-shadow:
@@ -1000,8 +1000,8 @@ export default function Login() {
         .vdp-tooth { fill: #434c59; }
 
         .vdp-submit {
-          margin-top: 10px;
-          padding: 7px 16px 8px;
+          margin-top: 6px;
+          padding: 5px 16px 6px;
           border: 1px solid rgba(210, 226, 246, 0.14);
           border-radius: 10px;
           background: linear-gradient(180deg, rgba(233, 239, 247, 0.07), rgba(233, 239, 247, 0.02));
