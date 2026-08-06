@@ -143,13 +143,13 @@ export default function AdminPanel() {
   }
 
   return (
-    <div className="p-6 max-w-5xl mx-auto space-y-6">
+    <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-6">
       <div className="flex items-center gap-3">
         <Link to="/" className="text-gray-400 hover:text-cyan"><ArrowLeft size={18} /></Link>
         <h2 className="text-lg font-semibold">Admin panel</h2>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
         <StatCard label="Team members" value={members.filter((m) => m.approved_at && m.is_active).length} />
         <StatCard label="Pending approval" value={pending.length} />
         <StatCard label="Projects" value={projectCount} />
@@ -189,9 +189,9 @@ export default function AdminPanel() {
         </section>
       )}
 
-      <section className="glass-panel p-6">
+      <section className="glass-panel p-4 sm:p-6">
         <h3 className="font-medium text-sm mb-4">Branding</h3>
-        <form onSubmit={handleSaveBranding} className="flex items-center gap-6">
+        <form onSubmit={handleSaveBranding} className="flex flex-wrap items-center gap-4 sm:gap-6">
           <button
             type="button"
             onClick={() => fileInputRef.current?.click()}
@@ -209,7 +209,7 @@ export default function AdminPanel() {
           </button>
           <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoChange} />
 
-          <div className="flex-1 space-y-1.5">
+          <div className="flex-1 min-w-[160px] space-y-1.5">
             <label className="text-xs uppercase tracking-wide text-gray-400">App name</label>
             <input className="input-field w-full max-w-xs" value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
           </div>
@@ -224,15 +224,15 @@ export default function AdminPanel() {
         {uploadingLogo && <p className="text-xs text-violet mt-2">Uploading logo…</p>}
       </section>
 
-      <section className="glass-panel p-6">
+      <section className="glass-panel p-4 sm:p-6">
         <h3 className="font-medium text-sm mb-1">IP allowlist</h3>
         <p className="text-xs text-gray-500 mb-4">
           Opt-in: while this list is empty, access is unrestricted. Add at least one IP to start enforcing — enforced by the Vercel Edge Middleware at <code className="text-gray-400">middleware.ts</code>, not just this table.
         </p>
-        <form onSubmit={handleAddIp} className="flex gap-2 mb-4">
-          <input required className="input-field flex-1" placeholder="203.0.113.42" value={newIp} onChange={(e) => setNewIp(e.target.value)} />
-          <input className="input-field flex-1" placeholder="Note (optional)" value={newIpNote} onChange={(e) => setNewIpNote(e.target.value)} />
-          <button type="submit" className="btn-primary text-sm px-3 flex items-center gap-1"><Plus size={14} /> Add</button>
+        <form onSubmit={handleAddIp} className="flex flex-col sm:flex-row gap-2 mb-4">
+          <input required className="input-field flex-1 min-w-0" placeholder="203.0.113.42" value={newIp} onChange={(e) => setNewIp(e.target.value)} />
+          <input className="input-field flex-1 min-w-0" placeholder="Note (optional)" value={newIpNote} onChange={(e) => setNewIpNote(e.target.value)} />
+          <button type="submit" className="btn-primary text-sm px-3 flex items-center justify-center gap-1 shrink-0"><Plus size={14} /> Add</button>
         </form>
         <div className="divide-y divide-white/5">
           {allowlist.length === 0 && <p className="text-xs text-gray-500">No entries — access is currently unrestricted.</p>}

@@ -40,18 +40,18 @@ export default function CodeScanner({ projectId, onClose }: { projectId: string;
 
           {findings && (
             <>
-              <div className="grid grid-cols-3 gap-3">
-                <div className="glass-panel p-3 text-center">
-                  <p className="text-xl font-bold text-magenta">{secretCount}</p>
-                  <p className="text-[10px] text-gray-500 uppercase">Possible secrets</p>
+              <div className="grid grid-cols-3 gap-2 sm:gap-3">
+                <div className="glass-panel p-2 sm:p-3 text-center">
+                  <p className="text-lg sm:text-xl font-bold text-magenta">{secretCount}</p>
+                  <p className="text-[9px] sm:text-[10px] text-gray-500 uppercase">Possible secrets</p>
                 </div>
-                <div className="glass-panel p-3 text-center">
-                  <p className="text-xl font-bold text-violet">{todoCount}</p>
-                  <p className="text-[10px] text-gray-500 uppercase">TODOs</p>
+                <div className="glass-panel p-2 sm:p-3 text-center">
+                  <p className="text-lg sm:text-xl font-bold text-violet">{todoCount}</p>
+                  <p className="text-[9px] sm:text-[10px] text-gray-500 uppercase">TODOs</p>
                 </div>
-                <div className="glass-panel p-3 text-center">
-                  <p className="text-xl font-bold text-yellow-400">{largeFileCount}</p>
-                  <p className="text-[10px] text-gray-500 uppercase">Large files</p>
+                <div className="glass-panel p-2 sm:p-3 text-center">
+                  <p className="text-lg sm:text-xl font-bold text-yellow-400">{largeFileCount}</p>
+                  <p className="text-[9px] sm:text-[10px] text-gray-500 uppercase">Large files</p>
                 </div>
               </div>
 

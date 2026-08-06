@@ -12,9 +12,11 @@
 }
 
 @layer base {
-  html { color-scheme: dark; }
+  html { color-scheme: dark; overflow-x: hidden; }
   body {
     @apply bg-void text-gray-100 font-sans antialiased;
+    overflow-x: hidden;
+    max-width: 100vw;
     background-image:
       linear-gradient(rgba(46,230,214,0.035) 1px, transparent 1px),
       linear-gradient(90deg, rgba(46,230,214,0.035) 1px, transparent 1px);
