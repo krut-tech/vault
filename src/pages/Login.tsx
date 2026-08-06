@@ -1036,6 +1036,14 @@ export default function Login() {
         .vdp-input:focus-visible { outline: none; }
 
         .vdp-submit-label { position: relative; z-index: 1; white-space: nowrap; }
+        .vdp-submit.vdp-granted-btn .vdp-submit-label {
+          animation: vdp-label-glow 0.85s ease forwards;
+        }
+        @keyframes vdp-label-glow {
+          0% { color: #cfd7e2; text-shadow: none; }
+          45% { color: var(--vdp-amber); text-shadow: 0 0 6px var(--vdp-amber-soft), 0 0 16px var(--vdp-amber-soft); }
+          100% { color: var(--vdp-amber); text-shadow: 0 0 5px var(--vdp-amber-soft); }
+        }
 
         .vdp-submit-ring {
           position: absolute;
