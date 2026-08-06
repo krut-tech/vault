@@ -41,7 +41,7 @@ export default function CommentsPanel({ fileId, onClose }: { fileId: string; onC
   }
 
   return (
-    <div className="fixed inset-y-0 right-0 z-40 w-80 glass-panel glow-border m-4 flex flex-col">
+    <div className="fixed inset-y-0 right-0 z-40 w-80 max-w-[calc(100vw-1.5rem)] glass-panel glow-border m-3 sm:m-4 flex flex-col">
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
         <h3 className="font-semibold text-sm">Comments</h3>
         <button onClick={onClose} className="text-gray-400 hover:text-magenta" aria-label="Close comments">✕</button>

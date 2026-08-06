@@ -37,8 +37,8 @@ export default function DeployPanel({ projectId, onClose }: { projectId: string;
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <div className="glass-panel glow-border w-full max-w-3xl max-h-[85vh] flex overflow-hidden">
-        <div className="w-64 border-r border-white/10 overflow-y-auto">
+      <div className="glass-panel glow-border w-full max-w-3xl max-h-[90vh] sm:max-h-[85vh] flex flex-col sm:flex-row overflow-hidden">
+        <div className="sm:w-64 max-h-40 sm:max-h-none shrink-0 border-b sm:border-b-0 sm:border-r border-white/10 overflow-y-auto">
           <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
             <h2 className="font-semibold text-sm flex items-center gap-1.5"><Rocket size={14} /> Deploy targets</h2>
             <button onClick={onClose} className="text-gray-400 hover:text-magenta"><X size={16} /></button>
@@ -63,7 +63,7 @@ export default function DeployPanel({ projectId, onClose }: { projectId: string;
           {targets.length === 0 && <p className="px-4 py-3 text-xs text-gray-500">No deploy targets configured.</p>}
         </div>
 
-        <div className="flex-1 overflow-y-auto p-4">
+        <div className="flex-1 min-w-0 overflow-y-auto p-4">
           {showForm && (
             <DeployTargetForm
               projectId={projectId}
@@ -77,12 +77,12 @@ export default function DeployPanel({ projectId, onClose }: { projectId: string;
 
           {!showForm && selected && (
             <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-medium text-sm">{selected.name}</h3>
-                  <p className="text-xs text-gray-500">{selected.username}@{selected.host}:{selected.port}{selected.remote_path}</p>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <h3 className="font-medium text-sm truncate">{selected.name}</h3>
+                  <p className="text-xs text-gray-500 truncate">{selected.username}@{selected.host}:{selected.port}{selected.remote_path}</p>
                 </div>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 shrink-0">
                   <button onClick={handleDeploy} disabled={deploying} className="btn-primary text-xs px-3 py-1.5 flex items-center gap-1">
                     <Rocket size={12} /> {deploying ? 'Deploying…' : 'Deploy now'}
                   </button>

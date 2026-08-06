@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type MouseEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, FolderGit2, Trash2, Pencil, Kanban as KanbanIcon, Timer, ShieldCheck, Activity, StickyNote } from 'lucide-react'
+import { Plus, FolderGit2, Trash2, Pencil, Kanban as KanbanIcon, Timer, ShieldCheck, Activity, StickyNote, LogOut } from 'lucide-react'
 import { listProjects, createProject, renameProject, softDeleteProject } from '../lib/api/projects'
 import { LANGUAGES } from '../types/vault'
 import type { Project } from '../types/vault'
@@ -55,14 +55,16 @@ export default function Projects() {
   }
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="glass-panel flex items-center justify-between gap-4 px-5 py-3 mb-6">
+    <div className="p-3 sm:p-6 max-w-6xl mx-auto">
+      <div className="glass-panel flex flex-wrap items-center justify-between gap-3 px-4 py-3 mb-6 sm:px-5">
         <div className="flex items-center gap-2.5 shrink-0">
           {logoUrl && <img src={logoUrl} alt="" className="h-7 w-7 rounded-lg object-cover" />}
-          <h1 className="text-lg font-bold neon-gradient-text-animated">{appName}</h1>
+          <h1 className="text-lg font-bold neon-gradient-text-animated truncate max-w-[50vw] sm:max-w-none">{appName}</h1>
         </div>
-        <GlobalSearch />
-        <div className="flex items-center gap-4 shrink-0">
+        <div className="order-3 w-full sm:order-none sm:w-auto sm:flex-1 sm:min-w-[160px]">
+          <GlobalSearch />
+        </div>
+        <div className="flex items-center gap-2.5 sm:gap-4 shrink-0 flex-wrap justify-end">
           <Link to="/boards" className="text-gray-400 hover:text-cyan" title="Kanban boards">
             <KanbanIcon size={18} />
           </Link>
@@ -89,20 +91,25 @@ export default function Projects() {
                 {(profile?.full_name ?? profile?.email ?? '?').charAt(0).toUpperCase()}
               </span>
             )}
-            <span className="hidden sm:inline">{profile?.full_name ?? profile?.email}</span>
+            <span className="hidden lg:inline">{profile?.full_name ?? profile?.email}</span>
           </Link>
-          <button onClick={() => signOut()} className="text-sm px-3 py-1.5 rounded-lg border border-white/10 hover:border-magenta/50 hover:text-magenta transition-colors">
-            Sign out
+          <button
+            onClick={() => signOut()}
+            title="Sign out"
+            className="flex items-center gap-1.5 text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-white/10 hover:border-magenta/50 hover:text-magenta transition-colors"
+          >
+            <LogOut size={14} className="sm:hidden" />
+            <span className="hidden sm:inline">Sign out</span>
           </button>
         </div>
       </div>
 
-      <div className="flex items-center justify-between mb-6">
-        <div>
+      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+        <div className="min-w-0">
           <h2 className="text-lg font-semibold">Projects</h2>
           <p className="text-sm text-gray-500">Your team's code vault, organized by project.</p>
         </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-1.5 text-sm">
+        <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-1.5 text-sm shrink-0">
           <Plus size={16} /> New project
         </button>
       </div>
