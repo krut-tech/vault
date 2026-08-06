@@ -1026,11 +1026,12 @@ export default function Login() {
           text-align: center;
           cursor: pointer;
           overflow: visible;
+          transform: translateX(53px);
           transition: background 0.2s ease, transform 0.16s cubic-bezier(0.25, 0.1, 0.25, 1), border-color 0.2s ease, color 0.3s ease;
           -webkit-tap-highlight-color: transparent;
         }
         .vdp-submit:hover { background: linear-gradient(180deg, rgba(233, 239, 247, 0.11), rgba(233, 239, 247, 0.04)); border-color: rgba(210, 226, 246, 0.24); }
-        .vdp-submit:active { transform: translateY(1px) scale(0.97); }
+        .vdp-submit:active { transform: translateX(53px) translateY(1px) scale(0.97); }
         .vdp-submit:focus { outline: none; }
         .vdp-submit:focus-visible { outline: 2px solid var(--vdp-amber); outline-offset: 3px; }
         .vdp-input:focus-visible { outline: none; }
