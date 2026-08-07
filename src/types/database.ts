@@ -28,9 +28,15 @@ export interface Database {
         Relationships: []
       }
       projects: {
-        Row: { id: string; name: string; description: string | null; language: string; created_by: string; is_deleted: boolean; created_at: string; updated_at: string }
-        Insert: { id?: string; name: string; description?: string | null; language: string; created_by: string; is_deleted?: boolean; created_at?: string; updated_at?: string }
+        Row: { id: string; name: string; description: string | null; language: string; created_by: string; is_private: boolean; is_deleted: boolean; created_at: string; updated_at: string }
+        Insert: { id?: string; name: string; description?: string | null; language: string; created_by: string; is_private?: boolean; is_deleted?: boolean; created_at?: string; updated_at?: string }
         Update: Partial<Database['public']['Tables']['projects']['Insert']>
+        Relationships: []
+      }
+      project_access: {
+        Row: { project_id: string; user_id: string; granted_by: string; granted_at: string }
+        Insert: { project_id: string; user_id: string; granted_by: string; granted_at?: string }
+        Update: Partial<Database['public']['Tables']['project_access']['Insert']>
         Relationships: []
       }
       folders: {
