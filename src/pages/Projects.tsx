@@ -1,7 +1,16 @@
 import { useEffect, useState, type FormEvent, type MouseEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Plus, FolderGit2, Trash2, Pencil, Kanban as KanbanIcon, Timer, ShieldCheck, Activity, StickyNote, LogOut } from 'lucide-react'
-import { listProjects, createProject, renameProject, softDeleteProject } from '../lib/api/projects'
+import { Plus, FolderGit2, Trash2, Pencil, Kanban as KanbanIcon, Timer, ShieldCheck, Activity, StickyNote, LogOut, Lock, Users } from 'lucide-react'
+import {
+  listProjects,
+  createProject,
+  renameProject,
+  softDeleteProject,
+  listProjectAccess,
+  grantProjectAccess,
+  revokeProjectAccess,
+} from '../lib/api/projects'
+import { listTeamMembers, type TeamMember } from '../lib/api/admin'
 import { LANGUAGES } from '../types/vault'
 import type { Project } from '../types/vault'
 import { useAuthStore } from '../store/authStore'
@@ -14,8 +23,10 @@ export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [accessModalProject, setAccessModalProject] = useState<Project | null>(null)
   const user = useAuthStore((s) => s.user)
   const profile = useAuthStore((s) => s.profile)
+  const canMakePrivate = profile?.role === 'owner' || profile?.role === 'admin'
   const signOut = useAuthStore((s) => s.signOut)
   const { appName, logoUrl, load } = useBrandingStore()
   const pushToast = useToastStore((s) => s.push)
@@ -127,6 +138,15 @@ export default function Projects() {
         {projects.map((p) => (
           <Link key={p.id} to={`/projects/${p.id}`} className="group relative glass-panel p-5 hover:glow-border transition-shadow block">
             <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {p.is_private && (profile?.role === 'owner' || p.created_by === user?.id) && (
+                <button
+                  onClick={(e) => { e.preventDefault(); e.stopPropagation(); setAccessModalProject(p) }}
+                  className="p-1.5 rounded-lg text-gray-500 hover:text-cyan hover:bg-white/5"
+                  title="Manage access"
+                >
+                  <Users size={14} />
+                </button>
+              )}
               <button
                 onClick={(e) => handleRename(e, p)}
                 className="p-1.5 rounded-lg text-gray-500 hover:text-cyan hover:bg-white/5"
@@ -143,7 +163,10 @@ export default function Projects() {
               </button>
             </div>
             <div className="flex items-center justify-between mb-2 pr-14">
-              <h3 className="font-medium truncate">{p.name}</h3>
+              <h3 className="font-medium truncate flex items-center gap-1.5">
+                {p.is_private && <Lock size={12} className="text-magenta shrink-0" />}
+                <span className="truncate">{p.name}</span>
+              </h3>
               <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-violet/15 text-violet shrink-0">{p.language}</span>
             </div>
             <p className="text-sm text-gray-500 line-clamp-2 min-h-[2.5rem]">{p.description || 'No description'}</p>
@@ -155,27 +178,74 @@ export default function Projects() {
       {showModal && user && (
         <CreateProjectModal
           userId={user.id}
+          canMakePrivate={canMakePrivate}
           onClose={() => setShowModal(false)}
           onCreated={(project) => { setShowModal(false); pushToast(`Created "${project.name}"`, { type: 'success' }); navigate(`/projects/${project.id}`) }}
+        />
+      )}
+
+      {accessModalProject && user && (
+        <ManageAccessModal
+          project={accessModalProject}
+          currentUserId={user.id}
+          onClose={() => setAccessModalProject(null)}
         />
       )}
     </div>
   )
 }
 
-function CreateProjectModal({ userId, onClose, onCreated }: { userId: string; onClose: () => void; onCreated: (p: Project) => void }) {
+function CreateProjectModal({
+  userId,
+  canMakePrivate,
+  onClose,
+  onCreated,
+}: {
+  userId: string
+  canMakePrivate: boolean
+  onClose: () => void
+  onCreated: (p: Project) => void
+}) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
   const [language, setLanguage] = useState<string>(LANGUAGES[0])
+  const [isPrivate, setIsPrivate] = useState(false)
+  const [members, setMembers] = useState<TeamMember[]>([])
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!canMakePrivate) return
+    listTeamMembers()
+      .then((all) => setMembers(all.filter((m) => m.id !== userId && m.is_active)))
+      .catch(() => {})
+  }, [canMakePrivate, userId])
+
+  function toggleUser(id: string) {
+    setSelectedUserIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     setSubmitting(true)
     setError(null)
     try {
-      const project = await createProject({ name, description: description || null, language, created_by: userId })
+      const project = await createProject({
+        name,
+        description: description || null,
+        language,
+        created_by: userId,
+        is_private: canMakePrivate ? isPrivate : false,
+      })
+      if (canMakePrivate && isPrivate) {
+        await Promise.all([...selectedUserIds].map((uid) => grantProjectAccess(project.id, uid, userId)))
+      }
       onCreated(project)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create project')
@@ -186,7 +256,7 @@ function CreateProjectModal({ userId, onClose, onCreated }: { userId: string; on
 
   return (
     <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <form onSubmit={handleSubmit} className="glass-panel glow-border w-full max-w-md p-6 space-y-4">
+      <form onSubmit={handleSubmit} className="glass-panel glow-border w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
         <h3 className="font-semibold">New project</h3>
         <div className="space-y-1.5">
           <label className="text-xs uppercase tracking-wide text-gray-400">Name</label>
@@ -202,12 +272,129 @@ function CreateProjectModal({ userId, onClose, onCreated }: { userId: string; on
             {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
           </select>
         </div>
+
+        {canMakePrivate && (
+          <div className="space-y-3 pt-1 border-t border-white/10">
+            <label className="flex items-center gap-2 text-sm pt-3 cursor-pointer">
+              <input type="checkbox" checked={isPrivate} onChange={(e) => setIsPrivate(e.target.checked)} className="accent-cyan" />
+              <Lock size={13} className="text-magenta" />
+              Private project (only you + people you grant access can see it)
+            </label>
+
+            {isPrivate && (
+              <div className="space-y-1.5">
+                <label className="text-xs uppercase tracking-wide text-gray-400">Grant access to</label>
+                {members.length === 0 && <p className="text-xs text-gray-600">No other team members yet.</p>}
+                <div className="max-h-36 overflow-y-auto space-y-1 rounded-lg border border-white/10 p-2">
+                  {members.map((m) => (
+                    <label key={m.id} className="flex items-center gap-2 text-sm px-1.5 py-1 rounded-lg hover:bg-white/5 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedUserIds.has(m.id)}
+                        onChange={() => toggleUser(m.id)}
+                        className="accent-cyan"
+                      />
+                      <span className="truncate">{m.full_name ?? m.email}</span>
+                      <span className="text-[10px] text-gray-600 ml-auto shrink-0">{m.role}</span>
+                    </label>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         {error && <p className="text-sm text-magenta">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-xl border border-white/10 hover:border-white/30">Cancel</button>
           <button type="submit" disabled={submitting} className="btn-primary text-sm">{submitting ? 'Creating…' : 'Create'}</button>
         </div>
       </form>
+    </div>
+  )
+}
+
+function ManageAccessModal({
+  project,
+  currentUserId,
+  onClose,
+}: {
+  project: Project
+  currentUserId: string
+  onClose: () => void
+}) {
+  const [members, setMembers] = useState<TeamMember[]>([])
+  const [accessUserIds, setAccessUserIds] = useState<Set<string>>(new Set())
+  const [loading, setLoading] = useState(true)
+  const [savingId, setSavingId] = useState<string | null>(null)
+  const pushToast = useToastStore((s) => s.push)
+
+  useEffect(() => {
+    Promise.all([listTeamMembers(), listProjectAccess(project.id)])
+      .then(([all, access]) => {
+        setMembers(all.filter((m) => m.id !== project.created_by && m.is_active))
+        setAccessUserIds(new Set(access.map((a) => a.user_id)))
+      })
+      .finally(() => setLoading(false))
+  }, [project.id, project.created_by])
+
+  async function toggle(userId: string, granted: boolean) {
+    setSavingId(userId)
+    try {
+      if (granted) {
+        await revokeProjectAccess(project.id, userId)
+        setAccessUserIds((prev) => { const next = new Set(prev); next.delete(userId); return next })
+      } else {
+        await grantProjectAccess(project.id, userId, currentUserId)
+        setAccessUserIds((prev) => new Set(prev).add(userId))
+      }
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : 'Failed to update access', { type: 'error' })
+    } finally {
+      setSavingId(null)
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
+      <div className="glass-panel glow-border w-full max-w-md p-6 space-y-4">
+        <div>
+          <h3 className="font-semibold flex items-center gap-1.5"><Lock size={14} className="text-magenta" /> Manage access</h3>
+          <p className="text-xs text-gray-500 mt-1 truncate">{project.name}</p>
+        </div>
+
+        {loading && <p className="text-sm text-gray-500">Loading…</p>}
+
+        {!loading && (
+          <div className="max-h-72 overflow-y-auto space-y-1">
+            {members.length === 0 && <p className="text-sm text-gray-600">No other team members yet.</p>}
+            {members.map((m) => {
+              const granted = accessUserIds.has(m.id)
+              return (
+                <div key={m.id} className="flex items-center gap-2 text-sm px-2 py-1.5 rounded-lg hover:bg-white/5">
+                  <span className="truncate flex-1">{m.full_name ?? m.email}</span>
+                  <span className="text-[10px] text-gray-600 shrink-0">{m.role}</span>
+                  <button
+                    disabled={savingId === m.id}
+                    onClick={() => toggle(m.id, granted)}
+                    className={`text-xs px-2.5 py-1 rounded-lg border shrink-0 transition-colors ${
+                      granted
+                        ? 'border-cyan/40 text-cyan hover:border-magenta/50 hover:text-magenta'
+                        : 'border-white/10 text-gray-500 hover:border-cyan/50 hover:text-cyan'
+                    }`}
+                  >
+                    {savingId === m.id ? '…' : granted ? 'Revoke' : 'Grant'}
+                  </button>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        <div className="flex justify-end pt-1">
+          <button onClick={onClose} className="px-4 py-2 text-sm rounded-xl border border-white/10 hover:border-white/30">Done</button>
+        </div>
+      </div>
     </div>
   )
 }
