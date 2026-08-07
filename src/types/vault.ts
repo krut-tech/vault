@@ -4,9 +4,17 @@ export interface Project {
   description: string | null
   language: string
   created_by: string
+  is_private: boolean
   is_deleted: boolean
   created_at: string
   updated_at: string
+}
+
+export interface ProjectAccessEntry {
+  project_id: string
+  user_id: string
+  granted_by: string
+  granted_at: string
 }
 
 export interface Folder {
