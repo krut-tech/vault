@@ -19,6 +19,8 @@ export default function Login() {
   const emailRef = useRef<HTMLInputElement>(null)
   const passRef = useRef<HTMLInputElement>(null)
   const liveRef = useRef<HTMLSpanElement>(null)
+  const submitBtnRef = useRef<HTMLButtonElement>(null)
+  const submitLabelRef = useRef<HTMLSpanElement>(null)
   const attemptRef = useRef<() => void>(() => {})
 
   useEffect(() => {
@@ -205,11 +207,14 @@ export default function Login() {
       emailInput!.blur()
       passInput!.blur()
 
+      // Button flips to "Access Granted" with a border-light sweep (starts top-left,
+      // travels the full perimeter) before the vault mechanism kicks in.
+      if (submitLabelRef.current) submitLabelRef.current.textContent = 'Access Granted'
+      submitBtnRef.current?.classList.add('vdp-granted-btn')
+      live!.textContent = 'Access granted'
+
       if (prefersReduced()) {
         root!.classList.add('is-playing', 'p-b1', 'p-b2', 'p-b3', 'p-granted', 'p-open', 'p-reveal')
-        at(80, () => {
-          live!.textContent = 'Access granted'
-        })
         at(1400, () => {
           if (myGen !== gen) return
           navigate('/', { replace: true })
@@ -217,27 +222,28 @@ export default function Login() {
         return
       }
 
+      const BORDER_SWEEP_MS = 850
+
       root!.classList.add('is-playing')
-      at(250, () => spinWheel(myGen, 0, 1))
-      at(1800, () => {
+      at(BORDER_SWEEP_MS + 250, () => spinWheel(myGen, 0, 1))
+      at(BORDER_SWEEP_MS + 1800, () => {
         root!.classList.add('p-b1')
         shiver(1)
       })
-      at(2250, () => {
+      at(BORDER_SWEEP_MS + 2250, () => {
         root!.classList.add('p-b2')
         shiver(2)
       })
-      at(2800, () => {
+      at(BORDER_SWEEP_MS + 2800, () => {
         root!.classList.add('p-b3')
         shiver(3)
       })
-      at(3100, () => {
+      at(BORDER_SWEEP_MS + 3100, () => {
         root!.classList.add('p-granted')
-        live!.textContent = 'Access granted'
       })
-      at(3300, () => root!.classList.add('p-open'))
-      at(4200, () => root!.classList.add('p-reveal'))
-      at(5200, () => {
+      at(BORDER_SWEEP_MS + 3300, () => root!.classList.add('p-open'))
+      at(BORDER_SWEEP_MS + 4200, () => root!.classList.add('p-reveal'))
+      at(BORDER_SWEEP_MS + 5200, () => {
         if (myGen !== gen) return
         navigate('/', { replace: true })
       })
@@ -254,6 +260,8 @@ export default function Login() {
         resetClasses()
         root!.style.setProperty('--vdp-wrot', '0deg')
         live!.textContent = ''
+        submitBtnRef.current?.classList.remove('vdp-granted-btn')
+        if (submitLabelRef.current) submitLabelRef.current.textContent = 'Unlock'
         busy = false
       }
     }
@@ -472,8 +480,11 @@ export default function Login() {
                       </g>
                     </svg>
                   </div>
-                  <button className="vdp-submit" type="submit">
-                    Unlock
+                  <button className="vdp-submit" type="submit" ref={submitBtnRef}>
+                    <span className="vdp-submit-label" ref={submitLabelRef}>Unlock</span>
+                    <svg className="vdp-submit-ring" viewBox="0 0 100 40" preserveAspectRatio="none" aria-hidden="true">
+                      <rect x="1" y="1" width="98" height="38" rx="9" ry="9" />
+                    </svg>
                   </button>
                 </form>
               </div>
@@ -905,7 +916,7 @@ export default function Login() {
         .vdp-form {
           position: absolute;
           left: 26px;
-          top: 28px;
+          top: 16px;
           width: 138px;
         }
 
@@ -919,18 +930,18 @@ export default function Login() {
         }
 
         .vdp-label-2 {
-          margin-top: 6px;
+          margin-top: 4px;
         }
 
         .vdp-input {
           display: block;
           width: 100%;
-          margin-top: 6px;
-          padding: 4px 2px 6px;
+          margin-top: 4px;
+          padding: 3px 2px 4px;
           border: 0;
           background: transparent;
           color: #e6ebf2;
-          font-size: 17px;
+          font-size: 16px;
           letter-spacing: 0.14em;
           font-family: inherit;
           caret-color: var(--vdp-amber);
@@ -976,10 +987,10 @@ export default function Login() {
         }
 
         .vdp-gearbox {
-          margin-top: 8px;
+          margin-top: 4px;
           width: 100px;
-          height: 42px;
-          padding: 4px;
+          height: 38px;
+          padding: 2px;
           border-radius: 9px;
           background: linear-gradient(180deg, #141920, #1b212a);
           box-shadow:
@@ -1000,8 +1011,10 @@ export default function Login() {
         .vdp-tooth { fill: #434c59; }
 
         .vdp-submit {
-          margin-top: 10px;
-          padding: 7px 16px 8px;
+          position: relative;
+          display: block;
+          margin: 6px auto 0;
+          padding: 5px 16px 6px;
           border: 1px solid rgba(210, 226, 246, 0.14);
           border-radius: 10px;
           background: linear-gradient(180deg, rgba(233, 239, 247, 0.07), rgba(233, 239, 247, 0.02));
@@ -1010,17 +1023,62 @@ export default function Login() {
           font-weight: 600;
           font-family: inherit;
           letter-spacing: 0.04em;
+          text-align: center;
           cursor: pointer;
-          transition: background 0.2s ease, transform 0.16s cubic-bezier(0.25, 0.1, 0.25, 1), border-color 0.2s ease;
+          overflow: visible;
+          transform: translateX(53px);
+          transition: background 0.2s ease, transform 0.16s cubic-bezier(0.25, 0.1, 0.25, 1), border-color 0.2s ease, color 0.3s ease;
           -webkit-tap-highlight-color: transparent;
         }
         .vdp-submit:hover { background: linear-gradient(180deg, rgba(233, 239, 247, 0.11), rgba(233, 239, 247, 0.04)); border-color: rgba(210, 226, 246, 0.24); }
-        .vdp-submit:active { transform: translateY(1px) scale(0.97); }
+        .vdp-submit:active { transform: translateX(53px) translateY(1px) scale(0.97); }
         .vdp-submit:focus { outline: none; }
         .vdp-submit:focus-visible { outline: 2px solid var(--vdp-amber); outline-offset: 3px; }
         .vdp-input:focus-visible { outline: none; }
 
+        .vdp-submit-label { position: relative; z-index: 1; white-space: nowrap; }
+        .vdp-submit.vdp-granted-btn .vdp-submit-label {
+          animation: vdp-label-glow 0.85s ease forwards;
+        }
+        @keyframes vdp-label-glow {
+          0% { color: #cfd7e2; text-shadow: none; }
+          45% { color: var(--vdp-amber); text-shadow: 0 0 6px var(--vdp-amber-soft), 0 0 16px var(--vdp-amber-soft); }
+          100% { color: var(--vdp-amber); text-shadow: 0 0 5px var(--vdp-amber-soft); }
+        }
+
+        .vdp-submit-ring {
+          position: absolute;
+          inset: -4px;
+          width: calc(100% + 8px);
+          height: calc(100% + 8px);
+          pointer-events: none;
+        }
+        .vdp-submit-ring rect {
+          fill: none;
+          stroke: var(--vdp-amber);
+          stroke-width: 2.2;
+          stroke-linecap: round;
+          stroke-dasharray: 260;
+          stroke-dashoffset: 260;
+          opacity: 0;
+          filter: drop-shadow(0 0 3px var(--vdp-amber-soft)) drop-shadow(0 0 7px var(--vdp-amber-soft));
+        }
+
+        .vdp-submit.vdp-granted-btn {
+          color: var(--vdp-amber);
+          border-color: rgba(232, 163, 61, 0.55);
+          background: linear-gradient(180deg, rgba(232, 163, 61, 0.16), rgba(232, 163, 61, 0.05));
+        }
+        .vdp-submit.vdp-granted-btn .vdp-submit-ring rect {
+          animation: vdp-ring-sweep 0.85s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+        }
+        @keyframes vdp-ring-sweep {
+          0% { stroke-dashoffset: 260; opacity: 1; }
+          100% { stroke-dashoffset: 0; opacity: 1; }
+        }
+
         .vdp-root.is-playing .vdp-submit { pointer-events: none; opacity: 0.55; }
+        .vdp-root.is-playing .vdp-submit.vdp-granted-btn { opacity: 1; }
         .vdp-root.is-playing .vdp-input { pointer-events: none; }
 
         .vdp-vault { transition: transform 0.3s cubic-bezier(0.25, 0.1, 0.25, 1); }
