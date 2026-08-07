@@ -58,6 +58,21 @@ export async function renameProject(id: string, name: string) {
   if (error) throw error
 }
 
+/** Full edit: name, description, language, and (if allowed) privacy in one call. */
+export async function updateProject(
+  id: string,
+  input: { name: string; description: string | null; language: string; is_private?: boolean }
+) {
+  const { data, error } = await supabase
+    .from('projects')
+    .update({ ...input, updated_at: new Date().toISOString() })
+    .eq('id', id)
+    .select()
+    .single()
+  if (error) throw error
+  return data as Project
+}
+
 export async function softDeleteProject(id: string) {
   const { error } = await supabase.from('projects').update({ is_deleted: true }).eq('id', id)
   if (error) throw error
