@@ -107,6 +107,7 @@ export default function ProjectView() {
     if (!id || !user || !project) return
     const incoming = Array.from(fileList)
     const rejected: string[] = []
+    const failed: string[] = []
     const created: VaultFile[] = []
 
     for (const f of incoming) {
@@ -114,24 +115,34 @@ export default function ProjectView() {
         rejected.push(f.name)
         continue
       }
-      const content = await f.text()
-      const file = await createFile({
-        project_id: id,
-        folder_id: folderId,
-        name: f.name,
-        language: project.language,
-        content,
-        created_by: user.id,
-      })
-      created.push(file)
-      void logActivity(user.id, 'uploaded', 'file', file.id, { name: file.name, project_id: id })
+      try {
+        const content = await f.text()
+        const file = await createFile({
+          project_id: id,
+          folder_id: folderId,
+          name: f.name,
+          language: project.language,
+          content,
+          created_by: user.id,
+        })
+        created.push(file)
+        void logActivity(user.id, 'uploaded', 'file', file.id, { name: file.name, project_id: id })
+      } catch (err) {
+        console.error(`Upload failed for ${f.name}`, err)
+        failed.push(f.name)
+      }
     }
 
     if (created.length > 0) setFiles((prev) => [...prev, ...created])
-    if (rejected.length > 0) {
-      window.alert(
-        `This is a "${project.language}" project, so ${rejected.length} file(s) were skipped (wrong file type):\n\n${rejected.join('\n')}`,
-      )
+    if (rejected.length > 0 || failed.length > 0) {
+      const parts: string[] = []
+      if (rejected.length > 0) {
+        parts.push(`${rejected.length} file(s) skipped (wrong file type for a "${project.language}" project):\n${rejected.join('\n')}`)
+      }
+      if (failed.length > 0) {
+        parts.push(`${failed.length} file(s) failed to upload:\n${failed.join('\n')}`)
+      }
+      window.alert(`Uploaded ${created.length}/${incoming.length} file(s).\n\n${parts.join('\n\n')}`)
     }
   }
 
@@ -142,6 +153,7 @@ export default function ProjectView() {
     const currentUser = user
     const incoming = Array.from(fileList) as (File & { webkitRelativePath?: string })[]
     const rejected: string[] = []
+    const failed: string[] = []
     const createdFiles: VaultFile[] = []
     const pathToFolderId = new Map<string, string>()
     const localFolders = [...folders]
@@ -177,17 +189,22 @@ export default function ProjectView() {
         rejected.push(relPath)
         continue
       }
-      const folderId = parts.length > 0 ? await ensureFolderPath(parts) : null
-      const content = await f.text()
-      const file = await createFile({
-        project_id: projectId,
-        folder_id: folderId,
-        name: fileName,
-        language: project.language,
-        content,
-        created_by: currentUser.id,
-      })
-      createdFiles.push(file)
+      try {
+        const folderId = parts.length > 0 ? await ensureFolderPath(parts) : null
+        const content = await f.text()
+        const file = await createFile({
+          project_id: projectId,
+          folder_id: folderId,
+          name: fileName,
+          language: project.language,
+          content,
+          created_by: currentUser.id,
+        })
+        createdFiles.push(file)
+      } catch (err) {
+        console.error(`Upload failed for ${relPath}`, err)
+        failed.push(relPath)
+      }
     }
 
     setFolders(localFolders)
@@ -195,10 +212,15 @@ export default function ProjectView() {
       setFiles((prev) => [...prev, ...createdFiles])
       if (user) void logActivity(user.id, 'uploaded', 'folder', id, { count: createdFiles.length, project_id: id })
     }
-    if (rejected.length > 0) {
-      window.alert(
-        `This is a "${project.language}" project, so ${rejected.length} file(s) were skipped (wrong file type):\n\n${rejected.join('\n')}`,
-      )
+    if (rejected.length > 0 || failed.length > 0) {
+      const parts: string[] = []
+      if (rejected.length > 0) {
+        parts.push(`${rejected.length} file(s) skipped (wrong file type for a "${project.language}" project):\n${rejected.join('\n')}`)
+      }
+      if (failed.length > 0) {
+        parts.push(`${failed.length} file(s) failed to upload:\n${failed.join('\n')}`)
+      }
+      window.alert(`Uploaded ${createdFiles.length}/${incoming.length} file(s).\n\n${parts.join('\n\n')}`)
     }
   }
 
