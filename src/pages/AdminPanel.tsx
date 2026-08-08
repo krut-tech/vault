@@ -316,45 +316,51 @@ export default function AdminPanel() {
               </div>
             </div>
           ))}
-          {members.filter((m) => m.approved_at && !m.is_active && !m.deleted_at).length > 0 && (
-            <div className="px-5 py-3">
-              <p className="text-xs text-gray-600 mb-2">
-                {members.filter((m) => m.approved_at && !m.is_active && !m.deleted_at).length} removed member(s) — hidden from the active list above, still shown as author on their past work.
-              </p>
-              <div className="divide-y divide-white/5 rounded-lg border border-white/5">
-                {members
-                  .filter((m) => m.approved_at && !m.is_active && !m.deleted_at)
-                  .map((m) => (
-                    <div key={m.id} className="flex items-center justify-between px-3 py-2.5">
-                      <div className="min-w-0">
-                        <p className="text-sm text-gray-400 truncate">{m.full_name ?? m.email}</p>
-                        <p className="text-xs text-gray-600 truncate">{m.email}</p>
-                      </div>
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          onClick={() => handleRestoreMember(m)}
-                          disabled={memberActionId === m.id}
-                          className="p-1.5 rounded-lg text-gray-500 hover:text-cyan hover:bg-white/5 disabled:opacity-40"
-                          title="Restore access"
-                        >
-                          <RotateCcw size={14} />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteMemberPermanently(m)}
-                          disabled={memberActionId === m.id}
-                          className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-white/5 disabled:opacity-40"
-                          title="Delete permanently"
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-              </div>
-            </div>
-          )}
         </div>
       </section>
+
+      {members.filter((m) => m.approved_at && !m.is_active && !m.deleted_at).length > 0 && (
+        <section className="glass-panel">
+          <h3 className="px-5 py-3 border-b border-white/10 font-medium text-sm">
+            Removed members
+            <span className="ml-2 text-xs font-normal text-gray-500">
+              {members.filter((m) => m.approved_at && !m.is_active && !m.deleted_at).length}
+            </span>
+          </h3>
+          <p className="px-5 pt-3 text-xs text-gray-600">Hidden from the active team list, still shown as author on their past work. Restore their access, or delete them permanently.</p>
+          <div className="divide-y divide-white/5 mt-1">
+            {members
+              .filter((m) => m.approved_at && !m.is_active && !m.deleted_at)
+              .map((m) => (
+                <div key={m.id} className="flex items-center justify-between px-5 py-3">
+                  <div className="min-w-0">
+                    <p className="text-sm text-gray-400 truncate">{m.full_name ?? m.email}</p>
+                    <p className="text-xs text-gray-600 truncate">{m.email}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <button
+                      onClick={() => handleRestoreMember(m)}
+                      disabled={memberActionId === m.id}
+                      className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-gray-400 border border-white/10 hover:text-cyan hover:border-cyan/30 hover:bg-white/5 disabled:opacity-40"
+                      title="Restore access"
+                    >
+                      <RotateCcw size={13} />
+                      Restore
+                    </button>
+                    <button
+                      onClick={() => handleDeleteMemberPermanently(m)}
+                      disabled={memberActionId === m.id}
+                      className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-white/5 disabled:opacity-40"
+                      title="Delete permanently"
+                    >
+                      <Trash2 size={14} />
+                    </button>
+                  </div>
+                </div>
+              ))}
+          </div>
+        </section>
+      )}
 
       <section className="glass-panel">
         <h3 className="px-5 py-3 border-b border-white/10 font-medium text-sm">Recent activity</h3>
