@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ShieldCheck, Upload, Plus, Trash2, Mail } from 'lucide-react'
-import { listTeamMembers, updateMemberRole, removeMember, listPendingSignups, approveSignup, type TeamMember } from '../lib/api/admin'
+import { ArrowLeft, ShieldCheck, Upload, Plus, Trash2, Mail, RotateCcw } from 'lucide-react'
+import { listTeamMembers, updateMemberRole, removeMember, restoreMember, deleteMemberPermanently, listPendingSignups, approveSignup, type TeamMember } from '../lib/api/admin'
 import { listActivity } from '../lib/api/activity'
 import { listProjects } from '../lib/api/projects'
 import { uploadLogo } from '../lib/api/branding'
@@ -20,6 +20,7 @@ export default function AdminPanel() {
   const [members, setMembers] = useState<TeamMember[]>([])
   const [pending, setPending] = useState<TeamMember[]>([])
   const [approvingId, setApprovingId] = useState<string | null>(null)
+  const [memberActionId, setMemberActionId] = useState<string | null>(null)
   const [activity, setActivity] = useState<ActivityRow[]>([])
   const [projectCount, setProjectCount] = useState(0)
   const [loading, setLoading] = useState(true)
@@ -86,6 +87,41 @@ export default function AdminPanel() {
       setMembers((prev) => prev.map((p) => (p.id === m.id ? { ...p, is_active: false } : p)))
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Failed to remove member')
+    }
+  }
+
+  async function handleRestoreMember(m: TeamMember) {
+    if (!window.confirm(`Restore ${m.full_name ?? m.email}'s access? They'll be able to log in again.`)) return
+    setMemberActionId(m.id)
+    try {
+      await restoreMember(m.id)
+      setMembers((prev) => prev.map((p) => (p.id === m.id ? { ...p, is_active: true } : p)))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to restore member')
+    } finally {
+      setMemberActionId(null)
+    }
+  }
+
+  async function handleDeleteMemberPermanently(m: TeamMember) {
+    if (
+      !window.confirm(
+        `Permanently delete ${m.full_name ?? m.email}?\n\nThis cannot be undone. If they never created anything, their account is deleted outright. If they authored projects/files/tasks, their row is kept as "Deleted member" only so that past work stays attributed — but their email, name, and avatar are wiped from the database.`,
+      )
+    )
+      return
+    setMemberActionId(m.id)
+    try {
+      const { mode } = await deleteMemberPermanently(m.id)
+      if (mode === 'deleted') {
+        setMembers((prev) => prev.filter((p) => p.id !== m.id))
+      } else {
+        setMembers((prev) => prev.map((p) => (p.id === m.id ? { ...p, deleted_at: new Date().toISOString() } : p)))
+      }
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to delete member')
+    } finally {
+      setMemberActionId(null)
     }
   }
 
@@ -280,10 +316,42 @@ export default function AdminPanel() {
               </div>
             </div>
           ))}
-          {members.filter((m) => m.approved_at && !m.is_active).length > 0 && (
-            <p className="px-5 py-2 text-xs text-gray-600">
-              {members.filter((m) => m.approved_at && !m.is_active).length} removed member(s) — hidden here, still shown as author on their past work.
-            </p>
+          {members.filter((m) => m.approved_at && !m.is_active && !m.deleted_at).length > 0 && (
+            <div className="px-5 py-3">
+              <p className="text-xs text-gray-600 mb-2">
+                {members.filter((m) => m.approved_at && !m.is_active && !m.deleted_at).length} removed member(s) — hidden from the active list above, still shown as author on their past work.
+              </p>
+              <div className="divide-y divide-white/5 rounded-lg border border-white/5">
+                {members
+                  .filter((m) => m.approved_at && !m.is_active && !m.deleted_at)
+                  .map((m) => (
+                    <div key={m.id} className="flex items-center justify-between px-3 py-2.5">
+                      <div className="min-w-0">
+                        <p className="text-sm text-gray-400 truncate">{m.full_name ?? m.email}</p>
+                        <p className="text-xs text-gray-600 truncate">{m.email}</p>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          onClick={() => handleRestoreMember(m)}
+                          disabled={memberActionId === m.id}
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-cyan hover:bg-white/5 disabled:opacity-40"
+                          title="Restore access"
+                        >
+                          <RotateCcw size={14} />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteMemberPermanently(m)}
+                          disabled={memberActionId === m.id}
+                          className="p-1.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-white/5 disabled:opacity-40"
+                          title="Delete permanently"
+                        >
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+              </div>
+            </div>
           )}
         </div>
       </section>

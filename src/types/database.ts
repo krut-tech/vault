@@ -4,8 +4,8 @@ export interface Database {
   public: {
     Tables: {
       profiles: {
-        Row: { id: string; email: string; full_name: string | null; avatar_url: string | null; role: 'owner' | 'admin' | 'member'; totp_secret: string | null; is_active: boolean; approved_at: string | null; created_at: string }
-        Insert: { id: string; email: string; full_name?: string | null; avatar_url?: string | null; role?: 'owner' | 'admin' | 'member'; totp_secret?: string | null; is_active?: boolean; approved_at?: string | null; created_at?: string }
+        Row: { id: string; email: string; full_name: string | null; avatar_url: string | null; role: 'owner' | 'admin' | 'member'; totp_secret: string | null; is_active: boolean; approved_at: string | null; deleted_at: string | null; created_at: string }
+        Insert: { id: string; email: string; full_name?: string | null; avatar_url?: string | null; role?: 'owner' | 'admin' | 'member'; totp_secret?: string | null; is_active?: boolean; approved_at?: string | null; deleted_at?: string | null; created_at?: string }
         Update: Partial<Database['public']['Tables']['profiles']['Insert']>
         Relationships: []
       }

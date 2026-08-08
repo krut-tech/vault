@@ -9,6 +9,7 @@ export interface TeamMember {
   created_at: string
   is_active: boolean
   approved_at: string | null
+  deleted_at: string | null
 }
 
 export async function listTeamMembers() {
@@ -40,4 +41,25 @@ export async function removeMember(memberId: string) {
   const { data, error } = await supabase.functions.invoke('remove-team-member', { body: { memberId } })
   if (error) throw new Error(error.message)
   if (data?.error) throw new Error(data.error)
+}
+
+/** Undoes removeMember: lifts the login ban and reactivates the profile. */
+export async function restoreMember(memberId: string) {
+  const { data, error } = await supabase.functions.invoke('restore-team-member', { body: { memberId } })
+  if (error) throw new Error(error.message)
+  if (data?.error) throw new Error(data.error)
+}
+
+/**
+ * Permanently deletes a removed member. Returns which outcome actually
+ * happened: 'deleted' if their auth user + profile row are both gone
+ * (they never authored anything), or 'anonymized' if their profile row
+ * had to be kept for FK integrity — in that case their email/name/avatar
+ * are scrubbed instead.
+ */
+export async function deleteMemberPermanently(memberId: string): Promise<{ mode: 'deleted' | 'anonymized' }> {
+  const { data, error } = await supabase.functions.invoke('delete-team-member', { body: { memberId } })
+  if (error) throw new Error(error.message)
+  if (data?.error) throw new Error(data.error)
+  return { mode: data.mode }
 }
