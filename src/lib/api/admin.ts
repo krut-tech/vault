@@ -31,8 +31,24 @@ export async function approveSignup(id: string) {
   if (error) throw error
 }
 
-export async function updateMemberRole(id: string, role: 'owner' | 'admin' | 'member') {
+/**
+ * Changes an admin's/member's role between 'admin' and 'member'. Cannot
+ * be used to grant 'owner' — that only happens via transferOwnership(),
+ * since there must always be exactly one owner.
+ */
+export async function updateMemberRole(id: string, role: 'admin' | 'member') {
   const { error } = await supabase.from('profiles').update({ role }).eq('id', id)
+  if (error) throw error
+}
+
+/**
+ * Hands ownership to an existing admin and demotes the caller (must be
+ * the current owner) to admin, atomically. The one-owner invariant is
+ * also enforced at the DB level by a unique index, so this can never
+ * result in two owners or zero owners.
+ */
+export async function transferOwnership(newOwnerId: string) {
+  const { error } = await supabase.rpc('transfer_ownership', { new_owner_id: newOwnerId })
   if (error) throw error
 }
 

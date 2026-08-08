@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, ShieldCheck, Upload, Plus, Trash2, Mail, RotateCcw } from 'lucide-react'
-import { listTeamMembers, updateMemberRole, removeMember, restoreMember, deleteMemberPermanently, listPendingSignups, approveSignup, type TeamMember } from '../lib/api/admin'
+import { listTeamMembers, updateMemberRole, transferOwnership, removeMember, restoreMember, deleteMemberPermanently, listPendingSignups, approveSignup, type TeamMember } from '../lib/api/admin'
 import { listActivity } from '../lib/api/activity'
 import { listProjects } from '../lib/api/projects'
 import { uploadLogo } from '../lib/api/branding'
@@ -16,6 +16,7 @@ type ActivityRow = Database['public']['Tables']['activity_log']['Row']
 export default function AdminPanel() {
   const profile = useAuthStore((s) => s.profile)
   const user = useAuthStore((s) => s.user)
+  const refreshProfile = useAuthStore((s) => s.refreshProfile)
   const { appName, logoUrl, load, update } = useBrandingStore()
   const [members, setMembers] = useState<TeamMember[]>([])
   const [pending, setPending] = useState<TeamMember[]>([])
@@ -76,6 +77,18 @@ export default function AdminPanel() {
   }
 
   async function handleRoleChange(id: string, role: 'owner' | 'admin' | 'member') {
+    if (role === 'owner') {
+      const target = members.find((m) => m.id === id)
+      if (!window.confirm(`Make ${target?.full_name ?? target?.email} the owner? You'll be demoted to admin — there can only be one owner.`)) return
+      try {
+        await transferOwnership(id)
+        setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, role: 'owner' } : m.id === profile?.id ? { ...m, role: 'admin' } : m)))
+        await refreshProfile()
+      } catch (err) {
+        window.alert(err instanceof Error ? err.message : 'Failed to transfer ownership')
+      }
+      return
+    }
     await updateMemberRole(id, role)
     setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, role } : m)))
   }
@@ -297,14 +310,17 @@ export default function AdminPanel() {
                 <select
                   value={m.role}
                   onChange={(e) => handleRoleChange(m.id, e.target.value as 'owner' | 'admin' | 'member')}
-                  disabled={m.id === profile?.id && m.role === 'owner'}
+                  disabled={m.role === 'owner'}
                   className="input-field text-xs py-1"
                 >
                   <option value="member">Member</option>
                   <option value="admin">Admin</option>
-                  <option value="owner">Owner</option>
+                  {/* Owner is only assignable by the current owner, only onto an existing admin
+                     (transferOwnership requires the target to already be 'admin'), and it always
+                     shows as the target's own current role so an owner row still renders correctly. */}
+                  {(m.role === 'owner' || (profile?.role === 'owner' && m.role === 'admin')) && <option value="owner">Owner</option>}
                 </select>
-                {m.id !== profile?.id && (
+                {m.id !== profile?.id && m.role !== 'owner' && (
                   <button
                     onClick={() => handleRemoveMember(m)}
                     className="p-1.5 rounded-lg text-gray-500 hover:text-magenta hover:bg-white/5"
