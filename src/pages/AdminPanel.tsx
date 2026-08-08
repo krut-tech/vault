@@ -1,15 +1,16 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, ShieldCheck, Upload, Plus, Trash2, Mail, RotateCcw } from 'lucide-react'
+import { ArrowLeft, ShieldCheck, Upload, Plus, Trash2, Mail, RotateCcw, Lock } from 'lucide-react'
 import { listTeamMembers, updateMemberRole, transferOwnership, removeMember, restoreMember, deleteMemberPermanently, listPendingSignups, approveSignup, type TeamMember } from '../lib/api/admin'
 import { listActivity } from '../lib/api/activity'
-import { listProjects } from '../lib/api/projects'
+import { listProjects, listProjectAccess } from '../lib/api/projects'
 import { uploadLogo } from '../lib/api/branding'
 import { listAllowlist, addAllowlistEntry, removeAllowlistEntry, type AllowlistEntry } from '../lib/api/ipAllowlist'
 import { useAuthStore } from '../store/authStore'
 import { useBrandingStore } from '../store/brandingStore'
 import { formatDistanceToNow } from 'date-fns'
 import type { Database } from '../types/database'
+import type { Project, ProjectAccessEntry } from '../types/vault'
 
 type ActivityRow = Database['public']['Tables']['activity_log']['Row']
 
@@ -23,7 +24,8 @@ export default function AdminPanel() {
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [memberActionId, setMemberActionId] = useState<string | null>(null)
   const [activity, setActivity] = useState<ActivityRow[]>([])
-  const [projectCount, setProjectCount] = useState(0)
+  const [projects, setProjects] = useState<Project[]>([])
+  const [privateAccess, setPrivateAccess] = useState<Record<string, ProjectAccessEntry[]>>({})
   const [loading, setLoading] = useState(true)
 
   const [nameDraft, setNameDraft] = useState('')
@@ -40,10 +42,17 @@ export default function AdminPanel() {
     Promise.all([listTeamMembers(), listActivity(50), listProjects(), load(), listAllowlist(), listPendingSignups()]).then(([m, a, p, , al, pd]) => {
       setMembers(m)
       setActivity(a)
-      setProjectCount(p.length)
+      setProjects(p)
       setAllowlist(al)
       setPending(pd)
       setLoading(false)
+
+      const privateIds = p.filter((proj) => proj.is_private).map((proj) => proj.id)
+      if (privateIds.length > 0) {
+        Promise.all(privateIds.map((id) => listProjectAccess(id).then((entries) => [id, entries] as const)))
+          .then((pairs) => setPrivateAccess(Object.fromEntries(pairs)))
+          .catch(() => {})
+      }
     })
   }, [load])
 
@@ -198,10 +207,11 @@ export default function AdminPanel() {
         <h2 className="text-lg font-semibold">Admin panel</h2>
       </div>
 
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         <StatCard label="Team members" value={members.filter((m) => m.approved_at && m.is_active).length} />
         <StatCard label="Pending approval" value={pending.length} />
-        <StatCard label="Projects" value={projectCount} />
+        <StatCard label="Projects" value={projects.length} />
+        <StatCard label="Private projects" value={projects.filter((p) => p.is_private).length} />
         <StatCard label="Logged actions" value={activity.length} />
       </div>
 
@@ -334,6 +344,42 @@ export default function AdminPanel() {
           ))}
         </div>
       </section>
+
+      {projects.some((p) => p.is_private) && (
+        <section className="glass-panel">
+          <h3 className="px-5 py-3 border-b border-white/10 font-medium text-sm flex items-center gap-2">
+            <Lock size={14} className="text-magenta" /> Private projects
+          </h3>
+          <p className="px-5 pt-3 text-xs text-gray-600">
+            {profile?.role === 'owner'
+              ? "As owner you can see every private project across the team."
+              : 'You can see private projects you created or were given access to.'}
+          </p>
+          <div className="divide-y divide-white/5 mt-1">
+            {projects.filter((p) => p.is_private).map((p) => {
+              const creator = members.find((m) => m.id === p.created_by)
+              const accessList = (privateAccess[p.id] ?? [])
+                .map((entry) => members.find((m) => m.id === entry.user_id))
+                .filter((m): m is TeamMember => Boolean(m))
+              return (
+                <div key={p.id} className="px-5 py-3">
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-sm truncate">{p.name}</p>
+                    <span className="text-xs text-gray-500 shrink-0">
+                      created by {creator?.full_name ?? creator?.email ?? 'Unknown'}
+                    </span>
+                  </div>
+                  <p className="text-xs text-gray-600 mt-1">
+                    {accessList.length === 0
+                      ? 'No one else has been granted access.'
+                      : `Access: ${accessList.map((m) => m.full_name ?? m.email).join(', ')}`}
+                  </p>
+                </div>
+              )
+            })}
+          </div>
+        </section>
+      )}
 
       {members.filter((m) => m.approved_at && !m.is_active && !m.deleted_at).length > 0 && (
         <section className="glass-panel">
