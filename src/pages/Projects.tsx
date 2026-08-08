@@ -135,7 +135,7 @@ export default function Projects() {
           const canEdit = profile?.role === 'owner' || p.created_by === user?.id
           return (
             <Link key={p.id} to={`/projects/${p.id}`} className="group relative glass-panel p-5 hover:glow-border transition-shadow block">
-              <div className="absolute top-3 right-3 flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              <div className="absolute top-3 right-3 flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                 {canEdit && (
                   <button
                     onClick={(e) => openEdit(e, p)}
