@@ -1,5 +1,5 @@
-import { useMemo, useRef, useState } from 'react'
-import { Folder as FolderIcon, FolderOpen, FileCode2, FileText, Star, Plus, Upload, FolderUp, Download, Trash2 } from 'lucide-react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Folder as FolderIcon, FolderOpen, FileCode2, FileText, Star, Plus, Upload, FolderUp, Download, Trash2, Pencil, Copy, FolderInput } from 'lucide-react'
 import type { Folder, VaultFile, PdfFile } from '../types/vault'
 
 interface Props {
@@ -17,7 +17,16 @@ interface Props {
   onDownloadFile: (file: VaultFile) => void
   onDownloadPdf: (pdf: PdfFile) => void
   onDeletePdf: (pdf: PdfFile) => void
+  onRenameFile: (file: VaultFile) => void
+  onRenameFolder: (folder: Folder) => void
+  onDuplicateFile: (file: VaultFile) => void
+  onMoveFile: (file: VaultFile, targetFolderId: string | null) => void
+  onMoveFolder: (folder: Folder, targetFolderId: string | null) => void
+  onDeleteFolder: (folder: Folder) => void
 }
+
+type ContextTarget = { kind: 'file'; item: VaultFile } | { kind: 'folder'; item: Folder }
+type MoveTarget = ContextTarget
 
 export default function FileTree({
   folders,
@@ -34,10 +43,31 @@ export default function FileTree({
   onDownloadFile,
   onDownloadPdf,
   onDeletePdf,
+  onRenameFile,
+  onRenameFolder,
+  onDuplicateFile,
+  onMoveFile,
+  onMoveFolder,
+  onDeleteFolder,
 }: Props) {
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [uploadMenuFor, setUploadMenuFor] = useState<string | null>(null)
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; target: ContextTarget } | null>(null)
+  const [moveTarget, setMoveTarget] = useState<MoveTarget | null>(null)
   const rootFolderInputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (!contextMenu) return
+    function close() { setContextMenu(null) }
+    window.addEventListener('click', close)
+    window.addEventListener('scroll', close, true)
+    window.addEventListener('resize', close)
+    return () => {
+      window.removeEventListener('click', close)
+      window.removeEventListener('scroll', close, true)
+      window.removeEventListener('resize', close)
+    }
+  }, [contextMenu])
 
   const childrenOf = useMemo(() => {
     const map = new Map<string | null, Folder[]>()
@@ -69,12 +99,72 @@ export default function FileTree({
     return map
   }, [pdfs])
 
+  // Flat, indented list of every folder (for the "Move to…" picker),
+  // excluding the folder being moved and anything inside it (can't
+  // move a folder into its own descendant).
+  const folderOptions = useMemo(() => {
+    function descendantIds(id: string): Set<string> {
+      const out = new Set<string>([id])
+      const queue = [id]
+      while (queue.length) {
+        const cur = queue.shift()!
+        for (const f of folders) {
+          if (f.parent_id === cur && !out.has(f.id)) {
+            out.add(f.id)
+            queue.push(f.id)
+          }
+        }
+      }
+      return out
+    }
+    const excluded = moveTarget?.kind === 'folder' ? descendantIds(moveTarget.item.id) : new Set<string>()
+
+    const options: { id: string; label: string }[] = []
+    function walk(parentId: string | null, depth: number) {
+      for (const f of childrenOf.get(parentId) ?? []) {
+        if (!excluded.has(f.id)) options.push({ id: f.id, label: `${'\u2003'.repeat(depth)}${f.name}` })
+        walk(f.id, depth + 1)
+      }
+    }
+    walk(null, 0)
+    return options
+  }, [childrenOf, folders, moveTarget])
+
   function toggle(id: string) {
     setExpanded((prev) => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
       return next
     })
+  }
+
+  function openContextMenu(e: React.MouseEvent, target: ContextTarget) {
+    e.preventDefault()
+    e.stopPropagation()
+    const menuWidth = 160
+    const menuHeight = target.kind === 'file' ? 148 : 112
+    const x = Math.min(e.clientX, window.innerWidth - menuWidth - 8)
+    const y = Math.min(e.clientY, window.innerHeight - menuHeight - 8)
+    setContextMenu({ x: Math.max(8, x), y: Math.max(8, y), target })
+  }
+
+  function handleContextAction(action: 'rename' | 'duplicate' | 'move' | 'delete') {
+    if (!contextMenu) return
+    const { target } = contextMenu
+    setContextMenu(null)
+    if (action === 'rename') {
+      if (target.kind === 'file') onRenameFile(target.item)
+      else onRenameFolder(target.item)
+    } else if (action === 'duplicate' && target.kind === 'file') {
+      onDuplicateFile(target.item)
+    } else if (action === 'move') {
+      setMoveTarget(target)
+    } else if (action === 'delete') {
+      if (target.kind === 'folder') onDeleteFolder(target.item)
+      // File delete is already reachable via the header's delete button
+      // when that file is active — the context menu doesn't duplicate it.
+    }
   }
 
   // Dropdown offering "Code file" vs "PDF" upload, used at root and per-folder.
@@ -148,6 +238,7 @@ export default function FileTree({
           className="group flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-sm"
           style={{ paddingLeft: depth * 14 + 8 }}
           onClick={() => toggle(folder.id)}
+          onContextMenu={(e) => openContextMenu(e, { kind: 'folder', item: folder })}
         >
           {isOpen ? <FolderOpen size={15} className="text-cyan shrink-0" /> : <FolderIcon size={15} className="text-cyan/70 shrink-0" />}
           <span className="truncate flex-1">{folder.name}</span>
@@ -179,6 +270,7 @@ export default function FileTree({
     return (
       <div
         key={file.id}
+        onContextMenu={(e) => openContextMenu(e, { kind: 'file', item: file })}
         className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm hover:bg-white/5 transition-colors ${
           active ? 'bg-cyan/10 text-cyan' : 'text-gray-300'
         }`}
@@ -234,7 +326,7 @@ export default function FileTree({
   const rootPdfs = pdfsOf.get(null) ?? []
 
   return (
-    <div className="glass-panel h-full overflow-y-auto p-2">
+    <div className="glass-panel h-full overflow-y-auto p-2 relative">
       <div className="flex items-center justify-between px-2 py-1.5 mb-1 flex-wrap gap-y-1">
         <span className="text-xs uppercase tracking-wide text-gray-500">Explorer</span>
         <div className="flex gap-2.5 items-center">
@@ -262,6 +354,58 @@ export default function FileTree({
       {rootPdfs.map((p) => renderPdf(p, 0))}
       {rootFolders.length === 0 && rootFiles.length === 0 && rootPdfs.length === 0 && (
         <p className="px-2 py-4 text-xs text-gray-500">Empty. Create a folder/file, or upload from your computer.</p>
+      )}
+
+      {contextMenu && (
+        <div
+          className="fixed z-50 w-40 glass-panel py-1 text-sm shadow-lg"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button onClick={() => handleContextAction('rename')} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 text-left text-gray-300">
+            <Pencil size={13} /> Rename
+          </button>
+          {contextMenu.target.kind === 'file' && (
+            <button onClick={() => handleContextAction('duplicate')} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 text-left text-gray-300">
+              <Copy size={13} /> Duplicate
+            </button>
+          )}
+          <button onClick={() => handleContextAction('move')} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 text-left text-gray-300">
+            <FolderInput size={13} /> Move to…
+          </button>
+          <button onClick={() => handleContextAction('delete')} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 text-left text-magenta">
+            <Trash2 size={13} /> Delete
+          </button>
+        </div>
+      )}
+
+      {moveTarget && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center px-4" role="presentation">
+          <div className="fixed inset-0 bg-black/60" onClick={() => setMoveTarget(null)} aria-hidden="true" />
+          <div role="dialog" aria-modal="true" aria-label="Move to folder" className="relative w-full max-w-xs glass-panel glow-border p-4">
+            <p className="text-sm font-medium mb-3">
+              Move "{moveTarget.item.name}" to…
+            </p>
+            <select
+              defaultValue=""
+              autoFocus
+              onChange={(e) => {
+                const value = e.target.value === '__root__' ? null : e.target.value
+                if (moveTarget.kind === 'file') onMoveFile(moveTarget.item, value)
+                else onMoveFolder(moveTarget.item, value)
+                setMoveTarget(null)
+              }}
+              className="input-field w-full text-sm"
+            >
+              <option value="" disabled>Choose a destination…</option>
+              <option value="__root__">Root (no folder)</option>
+              {folderOptions.map((o) => (
+                <option key={o.id} value={o.id}>{o.label}</option>
+              ))}
+            </select>
+            <button onClick={() => setMoveTarget(null)} className="mt-3 text-xs text-gray-500 hover:text-gray-300">Cancel</button>
+          </div>
+        </div>
       )}
     </div>
   )

@@ -18,7 +18,48 @@ import ProtectedRoute from './components/ProtectedRoute'
 import SplashScreen, { shouldShowSplash } from './components/SplashScreen'
 import NotificationBell from './components/NotificationBell'
 import ToastContainer from './components/ToastContainer'
+import CommandPalette from './components/CommandPalette'
+import AdvancedSearch from './components/AdvancedSearch'
 import { useAuthStore } from './store/authStore'
+
+function GlobalShortcuts() {
+  const [paletteOpen, setPaletteOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const user = useAuthStore((s) => s.user)
+
+  useEffect(() => {
+    if (!user) return
+    function onKeyDown(e: KeyboardEvent) {
+      const mod = e.metaKey || e.ctrlKey
+      if (mod && e.key.toLowerCase() === 'k') {
+        e.preventDefault()
+        setSearchOpen(false)
+        setPaletteOpen((v) => !v)
+        return
+      }
+      if (mod && e.shiftKey && e.key.toLowerCase() === 'f') {
+        e.preventDefault()
+        setPaletteOpen(false)
+        setSearchOpen((v) => !v)
+      }
+    }
+    window.addEventListener('keydown', onKeyDown)
+    return () => window.removeEventListener('keydown', onKeyDown)
+  }, [user])
+
+  if (!user) return null
+
+  return (
+    <>
+      <CommandPalette
+        open={paletteOpen}
+        onClose={() => setPaletteOpen(false)}
+        onOpenSearch={() => { setPaletteOpen(false); setSearchOpen(true) }}
+      />
+      <AdvancedSearch open={searchOpen} onClose={() => setSearchOpen(false)} />
+    </>
+  )
+}
 
 export default function App() {
   const init = useAuthStore((s) => s.init)
@@ -41,6 +82,7 @@ export default function App() {
         <NotificationBell />
       </div>
       <ToastContainer />
+      <GlobalShortcuts />
       <Routes>
         <Route path="/login" element={<Login />} />
         <Route path="/signup" element={<Signup />} />

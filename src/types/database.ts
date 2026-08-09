@@ -172,6 +172,28 @@ export interface Database {
         Args: { new_owner_id: string }
         Returns: void
       }
+      search_files: {
+        Args: {
+          query: string
+          p_project_id?: string | null
+          p_folder_id?: string | null
+          p_language?: string | null
+          p_favorites_only?: boolean | null
+          p_tag_id?: string | null
+          p_limit?: number | null
+        }
+        Returns: {
+          id: string
+          project_id: string
+          folder_id: string | null
+          name: string
+          language: string
+          is_favorite: boolean
+          updated_at: string
+          snippet: string
+          rank: number
+        }[]
+      }
     }
     Enums: Record<string, never>
     CompositeTypes: Record<string, never>

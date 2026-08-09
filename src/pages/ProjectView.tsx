@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, History, Star, Trash2, MessageSquare, Rocket, ScanSearch, FileArchive } from 'lucide-react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useParams, useSearchParams, Link } from 'react-router-dom'
+import { ArrowLeft, History, Star, Trash2, MessageSquare, Rocket, ScanSearch, FileArchive, X, ChevronRight, GripVertical } from 'lucide-react'
 import CommentsPanel from '../components/CommentsPanel'
 import DeployPanel from '../components/DeployPanel'
 import CodeScanner from '../components/CodeScanner'
 import { logActivity } from '../lib/api/activity'
 import { getProject } from '../lib/api/projects'
-import { listFolders, createFolder } from '../lib/api/folders'
-import { listFiles, createFile, toggleFavorite, softDeleteFile, getFile } from '../lib/api/files'
+import { listFolders, createFolder, renameFolder, moveFolder, softDeleteFolderCascade } from '../lib/api/folders'
+import { listFiles, createFile, toggleFavorite, softDeleteFile, getFile, renameFile, moveFile, duplicateFile } from '../lib/api/files'
 import { listPdfs, uploadPdf, deletePdf, getPdfUrl } from '../lib/api/pdfs'
 import { matchesProjectLanguage, acceptForLanguage } from '../lib/languageMap'
 import type { Project, Folder, VaultFile, PdfFile } from '../types/vault'
@@ -15,16 +15,29 @@ import FileTree from '../components/FileTree'
 import CodeEditor from '../components/CodeEditor'
 import VersionHistory from '../components/VersionHistory'
 import { useAuthStore } from '../store/authStore'
+import { useWorkspaceStore } from '../store/workspaceStore'
+import { useToastStore } from '../store/toastStore'
 import { supabase } from '../lib/supabase'
+
+const MIN_SIDEBAR = 190
+const MAX_SIDEBAR = 480
 
 export default function ProjectView() {
   const { id } = useParams<{ id: string }>()
+  const [searchParams, setSearchParams] = useSearchParams()
   const user = useAuthStore((s) => s.user)
+  const pushToast = useToastStore((s) => s.push)
+  const registerCommands = useWorkspaceStore((s) => s.registerCommands)
+  const unregisterCommands = useWorkspaceStore((s) => s.unregisterCommands)
+  const sidebarVisible = useWorkspaceStore((s) => s.sidebarVisible)
+  const pushRecentFile = useWorkspaceStore((s) => s.pushRecentFile)
 
   const [project, setProject] = useState<Project | null>(null)
   const [folders, setFolders] = useState<Folder[]>([])
   const [files, setFiles] = useState<VaultFile[]>([])
-  const [activeFile, setActiveFile] = useState<VaultFile | null>(null)
+  const [openFiles, setOpenFiles] = useState<VaultFile[]>([])
+  const [activeFileId, setActiveFileId] = useState<string | null>(null)
+  const [dirtyFileIds, setDirtyFileIds] = useState<Set<string>>(new Set())
   const [showHistory, setShowHistory] = useState(false)
   const [showComments, setShowComments] = useState(false)
   const [showDeploy, setShowDeploy] = useState(false)
@@ -32,7 +45,15 @@ export default function ProjectView() {
   const [pdfs, setPdfs] = useState<PdfFile[]>([])
   const [loading, setLoading] = useState(true)
   const [zipping, setZipping] = useState(false)
+  const [importingZip, setImportingZip] = useState(false)
   const [mobilePane, setMobilePane] = useState<'files' | 'editor'>('files')
+  const [sidebarWidth, setSidebarWidth] = useState(260)
+
+  const uploadFilesInputRef = useRef<HTMLInputElement>(null)
+  const uploadFolderInputRef = useRef<HTMLInputElement>(null)
+  const importZipInputRef = useRef<HTMLInputElement>(null)
+
+  const activeFile = useMemo(() => openFiles.find((f) => f.id === activeFileId) ?? null, [openFiles, activeFileId])
 
   const load = useCallback(async () => {
     if (!id) return
@@ -50,13 +71,29 @@ export default function ProjectView() {
 
   useEffect(() => { load() }, [load])
 
+  // ?file=<id> — used by the Command Palette's "Recent Files" and by
+  // Advanced Search results to jump straight into a file from outside
+  // the project. Consumed once, then stripped from the URL.
+  useEffect(() => {
+    const wanted = searchParams.get('file')
+    if (!wanted || files.length === 0) return
+    const match = files.find((f) => f.id === wanted)
+    if (match) openFile(match)
+    const next = new URLSearchParams(searchParams)
+    next.delete('file')
+    setSearchParams(next, { replace: true })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [files])
+
   useEffect(() => {
     if (!id) return
     const channel = supabase
       .channel(`project-${id}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'files', filter: `project_id=eq.${id}` }, (payload) => {
         if (payload.eventType === 'DELETE') {
-          setFiles((prev) => prev.filter((f) => f.id !== (payload.old as VaultFile).id))
+          const deletedId = (payload.old as VaultFile).id
+          setFiles((prev) => prev.filter((f) => f.id !== deletedId))
+          setOpenFiles((prev) => prev.filter((f) => f.id !== deletedId))
           return
         }
         const row = payload.new as VaultFile
@@ -66,7 +103,10 @@ export default function ProjectView() {
           if (exists) return prev.map((f) => (f.id === row.id ? row : f))
           return [...prev, row]
         })
-        setActiveFile((prev) => (prev && prev.id === row.id ? (row.is_deleted ? null : row) : prev))
+        setOpenFiles((prev) => {
+          if (row.is_deleted) return prev.filter((f) => f.id !== row.id)
+          return prev.map((f) => (f.id === row.id ? row : f))
+        })
       })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'folders', filter: `project_id=eq.${id}` }, async () => {
         setFolders(await listFolders(id))
@@ -75,6 +115,31 @@ export default function ProjectView() {
 
     return () => { supabase.removeChannel(channel) }
   }, [id])
+
+  function openFile(file: VaultFile) {
+    setOpenFiles((prev) => (prev.some((f) => f.id === file.id) ? prev : [...prev, file]))
+    setActiveFileId(file.id)
+    setMobilePane('editor')
+    if (project) pushRecentFile({ id: file.id, name: file.name, projectId: project.id, projectName: project.name, openedAt: Date.now() })
+  }
+
+  function closeTab(fileId: string) {
+    setOpenFiles((prev) => {
+      const idx = prev.findIndex((f) => f.id === fileId)
+      const next = prev.filter((f) => f.id !== fileId)
+      if (activeFileId === fileId) {
+        const fallback = next[idx] ?? next[idx - 1] ?? null
+        setActiveFileId(fallback?.id ?? null)
+      }
+      return next
+    })
+    setDirtyFileIds((prev) => {
+      if (!prev.has(fileId)) return prev
+      const next = new Set(prev)
+      next.delete(fileId)
+      return next
+    })
+  }
 
   async function handleCreateFolder(parentId: string | null) {
     if (!id) return
@@ -97,9 +162,52 @@ export default function ProjectView() {
       created_by: user.id,
     })
     setFiles((prev) => [...prev, file])
-    setActiveFile(file)
-    setMobilePane('editor')
+    openFile(file)
     void logActivity(user.id, 'created', 'file', file.id, { name: file.name, project_id: id })
+  }
+
+  async function handleRenameFile(file: VaultFile) {
+    const name = window.prompt('Rename file', file.name)
+    if (!name || name === file.name) return
+    await renameFile(file.id, name)
+    setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, name } : f)))
+    setOpenFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, name } : f)))
+  }
+
+  async function handleRenameFolder(folder: Folder) {
+    const name = window.prompt('Rename folder', folder.name)
+    if (!name || name === folder.name) return
+    await renameFolder(folder.id, name)
+    setFolders((prev) => prev.map((f) => (f.id === folder.id ? { ...f, name } : f)))
+  }
+
+  async function handleDuplicateFile(file: VaultFile) {
+    if (!user) return
+    const copy = await duplicateFile(file, user.id)
+    setFiles((prev) => [...prev, copy])
+    pushToast(`Duplicated as "${copy.name}"`, { type: 'success' })
+  }
+
+  async function handleMoveFile(file: VaultFile, targetFolderId: string | null) {
+    await moveFile(file.id, targetFolderId)
+    setFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, folder_id: targetFolderId } : f)))
+    setOpenFiles((prev) => prev.map((f) => (f.id === file.id ? { ...f, folder_id: targetFolderId } : f)))
+  }
+
+  async function handleMoveFolder(folder: Folder, targetFolderId: string | null) {
+    if (targetFolderId === folder.id) return
+    await moveFolder(folder.id, targetFolderId)
+    setFolders((prev) => prev.map((f) => (f.id === folder.id ? { ...f, parent_id: targetFolderId } : f)))
+  }
+
+  async function handleDeleteFolderFromTree(folder: Folder) {
+    if (!window.confirm(`Move "${folder.name}" and everything inside it to the recycle bin?`)) return
+    const { folderIds, fileIds } = await softDeleteFolderCascade(folder.id, folders, files)
+    setFolders((prev) => prev.filter((f) => !folderIds.includes(f.id)))
+    setFiles((prev) => prev.filter((f) => !fileIds.includes(f.id)))
+    setOpenFiles((prev) => prev.filter((f) => !fileIds.includes(f.id)))
+    if (activeFileId && fileIds.includes(activeFileId)) setActiveFileId(null)
+    pushToast(`Moved "${folder.name}" (${fileIds.length} file(s)) to recycle bin`, { link: '/recycle-bin', type: 'success' })
   }
 
   // --- Upload: individual files into a given folder (or root) ---
@@ -224,6 +332,92 @@ export default function ProjectView() {
     }
   }
 
+  // --- Import: a .zip archive, same folder-preserving logic as folder upload ---
+  async function handleImportZip(zipFile: File) {
+    if (!id || !user || !project) return
+    setImportingZip(true)
+    try {
+      const { default: JSZip } = await import('jszip')
+      const zip = await JSZip.loadAsync(zipFile)
+      const projectId = id
+      const currentUser = user
+      const rejected: string[] = []
+      const failed: string[] = []
+      const createdFiles: VaultFile[] = []
+      const pathToFolderId = new Map<string, string>()
+      const localFolders = [...folders]
+
+      async function ensureFolderPath(pathParts: string[]): Promise<string | null> {
+        let parentId: string | null = null
+        let cumulativePath = ''
+        for (const part of pathParts) {
+          cumulativePath = cumulativePath ? `${cumulativePath}/${part}` : part
+          if (pathToFolderId.has(cumulativePath)) {
+            parentId = pathToFolderId.get(cumulativePath)!
+            continue
+          }
+          const existing = localFolders.find((fo) => fo.parent_id === parentId && fo.name === part)
+          if (existing) {
+            pathToFolderId.set(cumulativePath, existing.id)
+            parentId = existing.id
+            continue
+          }
+          const folder = await createFolder({ project_id: projectId, parent_id: parentId, name: part })
+          localFolders.push(folder)
+          pathToFolderId.set(cumulativePath, folder.id)
+          parentId = folder.id
+        }
+        return parentId
+      }
+
+      const entries = Object.values(zip.files).filter((entry) => !entry.dir)
+      for (const entry of entries) {
+        const parts = entry.name.split('/').filter(Boolean)
+        const fileName = parts.pop()!
+        if (fileName.startsWith('.')) continue // skip .DS_Store / dotfiles from the archive
+        if (!matchesProjectLanguage(fileName, project.language)) {
+          rejected.push(entry.name)
+          continue
+        }
+        try {
+          const folderId = parts.length > 0 ? await ensureFolderPath(parts) : null
+          const content = await entry.async('text')
+          const file = await createFile({
+            project_id: projectId,
+            folder_id: folderId,
+            name: fileName,
+            language: project.language,
+            content,
+            created_by: currentUser.id,
+          })
+          createdFiles.push(file)
+        } catch (err) {
+          console.error(`Import failed for ${entry.name}`, err)
+          failed.push(entry.name)
+        }
+      }
+
+      setFolders(localFolders)
+      if (createdFiles.length > 0) {
+        setFiles((prev) => [...prev, ...createdFiles])
+        void logActivity(user.id, 'uploaded', 'folder', id, { count: createdFiles.length, project_id: id, source: 'zip' })
+        pushToast(`Imported ${createdFiles.length} file(s) from ZIP`, { type: 'success' })
+      }
+      if (rejected.length > 0 || failed.length > 0) {
+        window.alert(
+          `Imported ${createdFiles.length}/${entries.length} file(s) from the ZIP.\n\n` +
+          (rejected.length > 0 ? `${rejected.length} skipped (wrong file type for a "${project.language}" project).\n` : '') +
+          (failed.length > 0 ? `${failed.length} failed to read.` : ''),
+        )
+      }
+    } catch (err) {
+      console.error('ZIP import failed', err)
+      pushToast('Could not read that ZIP file', { type: 'error' })
+    } finally {
+      setImportingZip(false)
+    }
+  }
+
   function handleDownloadFile(file: VaultFile) {
     const blob = new Blob([file.content], { type: 'text/plain;charset=utf-8' })
     const url = URL.createObjectURL(blob)
@@ -302,7 +496,7 @@ export default function ProjectView() {
     if (!activeFile) return
     const next = !activeFile.is_favorite
     await toggleFavorite(activeFile.id, next)
-    setActiveFile({ ...activeFile, is_favorite: next })
+    setOpenFiles((prev) => prev.map((f) => (f.id === activeFile.id ? { ...f, is_favorite: next } : f)))
     setFiles((prev) => prev.map((f) => (f.id === activeFile.id ? { ...f, is_favorite: next } : f)))
   }
 
@@ -312,15 +506,46 @@ export default function ProjectView() {
     await softDeleteFile(activeFile.id)
     setFiles((prev) => prev.filter((f) => f.id !== activeFile.id))
     if (user) void logActivity(user.id, 'deleted', 'file', activeFile.id, { name: activeFile.name })
-    setActiveFile(null)
+    closeTab(activeFile.id)
   }
 
   async function handleRestoredVersion() {
     if (!activeFile) return
     const refreshed = await getFile(activeFile.id)
-    setActiveFile(refreshed)
+    setOpenFiles((prev) => prev.map((f) => (f.id === refreshed.id ? refreshed : f)))
     setShowHistory(false)
   }
+
+  // --- Command palette registration ---
+  useEffect(() => {
+    registerCommands({
+      newFile: () => handleCreateFile(null),
+      newFolder: () => handleCreateFolder(null),
+      uploadFiles: () => uploadFilesInputRef.current?.click(),
+      uploadFolder: () => uploadFolderInputRef.current?.click(),
+      importZip: () => importZipInputRef.current?.click(),
+    })
+    return () => unregisterCommands(['newFile', 'newFolder', 'uploadFiles', 'uploadFolder', 'importZip'])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, project, folders])
+
+  // --- Resizable sidebar (desktop only — mobile uses the pane switcher below) ---
+  function startResize(e: React.MouseEvent) {
+    e.preventDefault()
+    const startX = e.clientX
+    const startWidth = sidebarWidth
+    function onMove(ev: MouseEvent) {
+      setSidebarWidth(Math.min(MAX_SIDEBAR, Math.max(MIN_SIDEBAR, startWidth + (ev.clientX - startX))))
+    }
+    function onUp() {
+      window.removeEventListener('mousemove', onMove)
+      window.removeEventListener('mouseup', onUp)
+    }
+    window.addEventListener('mousemove', onMove)
+    window.addEventListener('mouseup', onUp)
+  }
+
+  const breadcrumbSegments = activeFile ? folderPath(activeFile.folder_id).split('/').filter(Boolean) : []
 
   if (loading) {
     return (
@@ -334,6 +559,30 @@ export default function ProjectView() {
 
   return (
     <div className="h-screen flex flex-col">
+      <input
+        ref={uploadFilesInputRef}
+        type="file"
+        multiple
+        accept={acceptForLanguage(project.language)}
+        className="hidden"
+        onChange={(e) => { if (e.target.files?.length) handleUploadFiles(null, e.target.files); e.target.value = '' }}
+      />
+      <input
+        ref={uploadFolderInputRef}
+        type="file"
+        multiple
+        className="hidden"
+        {...({ webkitdirectory: 'true', directory: 'true' } as Record<string, string>)}
+        onChange={(e) => { if (e.target.files?.length) handleUploadFolder(e.target.files); e.target.value = '' }}
+      />
+      <input
+        ref={importZipInputRef}
+        type="file"
+        accept=".zip,application/zip"
+        className="hidden"
+        onChange={(e) => { if (e.target.files?.[0]) handleImportZip(e.target.files[0]); e.target.value = '' }}
+      />
+
       <header className="glass-panel m-3 sm:m-4 mb-2 flex flex-wrap items-center justify-between gap-y-2 gap-x-3 px-4 py-3 sm:px-5">
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
           <Link to="/" className="text-gray-400 hover:text-cyan shrink-0"><ArrowLeft size={18} /></Link>
@@ -352,6 +601,14 @@ export default function ProjectView() {
             title="Download whole project as ZIP"
           >
             <FileArchive size={14} /> <span className="hidden sm:inline">{zipping ? 'Zipping…' : 'Download ZIP'}</span>
+          </button>
+          <button
+            onClick={() => importZipInputRef.current?.click()}
+            disabled={importingZip}
+            className="text-gray-400 hover:text-violet flex items-center gap-1 text-xs disabled:opacity-40 shrink-0"
+            title="Import a .zip archive into this project"
+          >
+            <FileArchive size={14} /> <span className="hidden sm:inline">{importingZip ? 'Importing…' : 'Import ZIP'}</span>
           </button>
         </div>
         {activeFile && (
@@ -372,7 +629,10 @@ export default function ProjectView() {
         )}
       </header>
 
-      <div className="flex-1 min-h-0 flex flex-col gap-2 px-3 sm:px-4 pb-4 md:grid md:grid-cols-[260px_1fr]">
+      <div
+        className="flex-1 min-h-0 flex flex-col gap-2 px-3 sm:px-4 pb-4 md:grid"
+        style={{ gridTemplateColumns: sidebarVisible ? `${sidebarWidth}px 6px 1fr` : '0px 0px 1fr' }}
+      >
         <div className="flex md:hidden glass-panel p-1 gap-1 text-xs shrink-0">
           <button
             type="button"
@@ -390,33 +650,102 @@ export default function ProjectView() {
           </button>
         </div>
 
-        <div className={`min-h-0 ${mobilePane === 'files' ? 'flex-1' : 'hidden'} md:block md:h-full md:min-h-0`}>
-          <FileTree
-            folders={folders}
-            files={files}
-            pdfs={pdfs}
-            activeFileId={activeFile?.id ?? null}
-            acceptExtensions={acceptForLanguage(project.language)}
-            onSelectFile={(f) => { setActiveFile(f); setMobilePane('editor') }}
-            onCreateFolder={handleCreateFolder}
-            onCreateFile={handleCreateFile}
-            onUploadFiles={handleUploadFiles}
-            onUploadFolder={handleUploadFolder}
-            onUploadPdf={handleUploadPdf}
-            onDownloadFile={handleDownloadFile}
-            onDownloadPdf={handleDownloadPdf}
-            onDeletePdf={handleDeletePdf}
-          />
-        </div>
+        {sidebarVisible && (
+          <div className={`min-h-0 ${mobilePane === 'files' ? 'flex-1' : 'hidden'} md:block md:h-full md:min-h-0 md:overflow-hidden`}>
+            <FileTree
+              folders={folders}
+              files={files}
+              pdfs={pdfs}
+              activeFileId={activeFileId}
+              acceptExtensions={acceptForLanguage(project.language)}
+              onSelectFile={openFile}
+              onCreateFolder={handleCreateFolder}
+              onCreateFile={handleCreateFile}
+              onUploadFiles={handleUploadFiles}
+              onUploadFolder={handleUploadFolder}
+              onUploadPdf={handleUploadPdf}
+              onDownloadFile={handleDownloadFile}
+              onDownloadPdf={handleDownloadPdf}
+              onDeletePdf={handleDeletePdf}
+              onRenameFile={handleRenameFile}
+              onRenameFolder={handleRenameFolder}
+              onDuplicateFile={handleDuplicateFile}
+              onMoveFile={handleMoveFile}
+              onMoveFolder={handleMoveFolder}
+              onDeleteFolder={handleDeleteFolderFromTree}
+            />
+          </div>
+        )}
 
-        <div className={`min-h-0 ${mobilePane === 'editor' ? 'flex-1' : 'hidden'} md:block md:h-full md:min-h-0`}>
-          {activeFile && user ? (
-            <CodeEditor key={activeFile.id} fileId={activeFile.id} initialContent={activeFile.content} language={activeFile.language} userId={user.id} />
-          ) : (
-            <div className="glass-panel h-full flex items-center justify-center text-gray-500 text-sm text-center px-4">
-              Select or create a file to start editing.
+        {sidebarVisible && (
+          <div
+            onMouseDown={startResize}
+            className="hidden md:flex items-center justify-center cursor-col-resize text-gray-700 hover:text-cyan/60 transition-colors"
+            title="Drag to resize"
+          >
+            <GripVertical size={12} />
+          </div>
+        )}
+
+        <div className={`min-h-0 flex flex-col gap-1.5 ${mobilePane === 'editor' ? 'flex-1' : 'hidden'} md:flex md:h-full md:min-h-0`}>
+          {openFiles.length > 0 && (
+            <div className="flex items-center gap-0.5 overflow-x-auto glass-panel px-1.5 py-1.5 shrink-0">
+              {openFiles.map((f) => (
+                <div
+                  key={f.id}
+                  onClick={() => setActiveFileId(f.id)}
+                  className={`group flex items-center gap-1.5 pl-3 pr-1.5 py-1.5 rounded-lg text-xs cursor-pointer shrink-0 transition-colors ${
+                    f.id === activeFileId ? 'bg-cyan/15 text-cyan' : 'text-gray-400 hover:bg-white/5'
+                  }`}
+                >
+                  <span className="truncate max-w-[140px]">{f.name}</span>
+                  {dirtyFileIds.has(f.id) && <span className="h-1.5 w-1.5 rounded-full bg-violet shrink-0" title="Unsaved changes" />}
+                  <button
+                    onClick={(e) => { e.stopPropagation(); closeTab(f.id) }}
+                    className="opacity-0 group-hover:opacity-100 hover:text-magenta shrink-0"
+                    aria-label={`Close ${f.name}`}
+                  >
+                    <X size={12} />
+                  </button>
+                </div>
+              ))}
             </div>
           )}
+
+          {activeFile && (
+            <div className="flex items-center gap-1.5 text-xs text-gray-500 px-1 flex-wrap shrink-0">
+              <span>{project.name}</span>
+              {breadcrumbSegments.map((seg, i) => (
+                <span key={i} className="flex items-center gap-1.5"><ChevronRight size={11} className="shrink-0" /> {seg}</span>
+              ))}
+              <span className="flex items-center gap-1.5"><ChevronRight size={11} className="shrink-0" /> <span className="text-gray-300">{activeFile.name}</span></span>
+            </div>
+          )}
+
+          <div className="flex-1 min-h-0">
+            {activeFile && user ? (
+              <CodeEditor
+                key={activeFile.id}
+                fileId={activeFile.id}
+                initialContent={activeFile.content}
+                language={activeFile.language}
+                userId={user.id}
+                onDirtyChange={(dirty) =>
+                  setDirtyFileIds((prev) => {
+                    const has = prev.has(activeFile.id)
+                    if (dirty === has) return prev
+                    const next = new Set(prev)
+                    dirty ? next.add(activeFile.id) : next.delete(activeFile.id)
+                    return next
+                  })
+                }
+              />
+            ) : (
+              <div className="glass-panel h-full flex items-center justify-center text-gray-500 text-sm text-center px-4">
+                Select or create a file to start editing.
+              </div>
+            )}
+          </div>
         </div>
       </div>
 

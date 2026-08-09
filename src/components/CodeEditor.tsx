@@ -1,9 +1,10 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Editor, { type OnMount } from '@monaco-editor/react'
 import { Play, Terminal } from 'lucide-react'
 import { useDebouncedCallback } from '../lib/useDebouncedCallback'
 import { saveFileContent } from '../lib/api/files'
 import { runCode, isExecutable, type RunResult } from '../lib/api/execute'
+import { useWorkspaceStore } from '../store/workspaceStore'
 import RunOutputPanel from './RunOutputPanel'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
@@ -14,50 +15,81 @@ interface Props {
   language: string
   userId: string
   onSaved?: () => void
+  onDirtyChange?: (dirty: boolean) => void
 }
 
-export default function CodeEditor({ fileId, initialContent, language, userId, onSaved }: Props) {
+export default function CodeEditor({ fileId, initialContent, language, userId, onSaved, onDirtyChange }: Props) {
   const [status, setStatus] = useState<SaveStatus>('idle')
   const [running, setRunning] = useState(false)
   const [runResult, setRunResult] = useState<RunResult | null>(null)
-  const [showOutput, setShowOutput] = useState(false)
   const [showStdin, setShowStdin] = useState(false)
   const [stdin, setStdin] = useState('')
   const contentRef = useRef(initialContent)
+  const editorRef = useRef<Parameters<OnMount>[0] | null>(null)
+  const showOutput = useWorkspaceStore((s) => s.terminalVisible)
+  const setTerminalVisible = useWorkspaceStore((s) => s.setTerminalVisible)
+  const registerCommands = useWorkspaceStore((s) => s.registerCommands)
+  const unregisterCommands = useWorkspaceStore((s) => s.unregisterCommands)
 
   const persist = useCallback(
     async (value: string) => {
       setStatus('saving')
+      onDirtyChange?.(true)
       try {
         await saveFileContent(fileId, value, userId)
         setStatus('saved')
+        onDirtyChange?.(false)
         onSaved?.()
       } catch {
         setStatus('error')
       }
     },
-    [fileId, userId, onSaved],
+    [fileId, userId, onSaved, onDirtyChange],
   )
 
   const debouncedSave = useDebouncedCallback(persist, 1200)
 
-  const handleMount: OnMount = (editor) => {
+  async function handleRun() {
+    setTerminalVisible(true)
+    setRunning(true)
+    const result = await runCode(language, contentRef.current, stdin)
+    setRunResult(result)
+    setRunning(false)
+  }
+
+  function handleFormat() {
+    editorRef.current?.getAction('editor.action.formatDocument')?.run()
+  }
+
+  // Registers this file's run/format/terminal-toggle so the global
+  // Command Palette (mounted elsewhere, has no idea an editor is even
+  // open) can trigger them. Re-registers whenever the runnability or
+  // active file changes so "Run Code" always targets whichever file is
+  // actually open right now.
+  useEffect(() => {
+    registerCommands({
+      runCurrentFile: isExecutable(language) ? handleRun : undefined,
+      formatCurrentFile: handleFormat,
+      toggleTerminal: () => setTerminalVisible(!showOutput),
+    })
+    return () => unregisterCommands(['runCurrentFile', 'formatCurrentFile', 'toggleTerminal'])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fileId, language, showOutput])
+
+  const handleMount: OnMount = (editor, monaco) => {
+    editorRef.current = editor
     editor.updateOptions({ fontLigatures: true, fontSize: 14, minimap: { enabled: true } })
+    editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
+      persist(contentRef.current)
+    })
   }
 
   function handleChange(value: string | undefined) {
     const v = value ?? ''
     contentRef.current = v
     setStatus('idle')
+    onDirtyChange?.(true)
     debouncedSave(v)
-  }
-
-  async function handleRun() {
-    setShowOutput(true)
-    setRunning(true)
-    const result = await runCode(language, contentRef.current, stdin)
-    setRunResult(result)
-    setRunning(false)
   }
 
   return (
@@ -74,7 +106,7 @@ export default function CodeEditor({ fileId, initialContent, language, userId, o
               >
                 <Terminal size={13} /> Input
               </button>
-              <button onClick={handleRun} disabled={running} className="flex items-center gap-1 text-cyan hover:text-cyan/80 disabled:opacity-50" title="Run code">
+              <button onClick={handleRun} disabled={running} className="flex items-center gap-1 text-cyan hover:text-cyan/80 disabled:opacity-50" title="Run code (or Ctrl/Cmd+K then Run Code)">
                 <Play size={13} /> Run
               </button>
             </>
@@ -112,7 +144,7 @@ export default function CodeEditor({ fileId, initialContent, language, userId, o
           }}
         />
       </div>
-      {showOutput && <RunOutputPanel running={running} result={runResult} onClose={() => setShowOutput(false)} />}
+      {showOutput && <RunOutputPanel running={running} result={runResult} onClose={() => setTerminalVisible(false)} />}
     </div>
   )
 }

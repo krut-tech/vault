@@ -36,6 +36,35 @@ export async function renameFile(id: string, name: string) {
   if (error) throw error
 }
 
+export async function moveFile(id: string, folderId: string | null) {
+  const { error } = await supabase.from('files').update({ folder_id: folderId }).eq('id', id)
+  if (error) throw error
+}
+
+export async function duplicateFile(file: VaultFile, createdBy: string): Promise<VaultFile> {
+  const { data, error } = await supabase
+    .from('files')
+    .insert({
+      project_id: file.project_id,
+      folder_id: file.folder_id,
+      name: nextCopyName(file.name),
+      language: file.language,
+      content: file.content,
+      created_by: createdBy,
+    })
+    .select()
+    .single()
+  if (error) throw error
+  return data as VaultFile
+}
+
+function nextCopyName(name: string): string {
+  const dot = name.lastIndexOf('.')
+  const base = dot > 0 ? name.slice(0, dot) : name
+  const ext = dot > 0 ? name.slice(dot) : ''
+  return `${base} copy${ext}`
+}
+
 export async function toggleFavorite(id: string, isFavorite: boolean) {
   const { error } = await supabase.from('files').update({ is_favorite: isFavorite }).eq('id', id)
   if (error) throw error
