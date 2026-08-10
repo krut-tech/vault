@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, ShieldCheck, Upload, Plus, Trash2, Mail, RotateCcw, Lock } from 'lucide-react'
-import { listTeamMembers, updateMemberRole, transferOwnership, removeMember, restoreMember, deleteMemberPermanently, listPendingSignups, approveSignup, type TeamMember } from '../lib/api/admin'
+import { listTeamMembers, updateMemberRole, transferOwnership, removeMember, restoreMember, deleteMemberPermanently, listPendingSignups, approveSignup, listLoginHistory, type TeamMember, type LoginHistoryRow } from '../lib/api/admin'
 import { listActivity } from '../lib/api/activity'
 import { listProjects, listProjectAccess } from '../lib/api/projects'
 import { uploadLogo } from '../lib/api/branding'
@@ -24,6 +24,10 @@ export default function AdminPanel() {
   const [approvingId, setApprovingId] = useState<string | null>(null)
   const [memberActionId, setMemberActionId] = useState<string | null>(null)
   const [activity, setActivity] = useState<ActivityRow[]>([])
+  const [loginHistory, setLoginHistory] = useState<LoginHistoryRow[]>([])
+  const [activityPersonFilter, setActivityPersonFilter] = useState<'all' | string>('all')
+  const [activityExcludedIds, setActivityExcludedIds] = useState<Set<string>>(new Set())
+  const [activityActionFilter, setActivityActionFilter] = useState<'all' | string>('all')
   const [projects, setProjects] = useState<Project[]>([])
   const [privateAccess, setPrivateAccess] = useState<Record<string, ProjectAccessEntry[]>>({})
   const [loading, setLoading] = useState(true)
@@ -41,12 +45,13 @@ export default function AdminPanel() {
   const [tab, setTab] = useState<'overview' | 'team' | 'security' | 'activity'>('overview')
 
   useEffect(() => {
-    Promise.all([listTeamMembers(), listActivity(50), listProjects(), load(), listAllowlist(), listPendingSignups()]).then(([m, a, p, , al, pd]) => {
+    Promise.all([listTeamMembers(), listActivity(500), listProjects(), load(), listAllowlist(), listPendingSignups(), listLoginHistory(300)]).then(([m, a, p, , al, pd, lh]) => {
       setMembers(m)
       setActivity(a)
       setProjects(p)
       setAllowlist(al)
       setPending(pd)
+      setLoginHistory(lh)
       setLoading(false)
 
       const privateIds = p.filter((proj) => proj.is_private).map((proj) => proj.id)
@@ -188,6 +193,56 @@ export default function AdminPanel() {
       setUploadingLogo(false)
     }
   }
+
+  const memberLookup = useMemo(() => new Map(members.map((m) => [m.id, m])), [members])
+  const memberByEmail = useMemo(() => new Map(members.map((m) => [m.email.toLowerCase(), m])), [members])
+
+  interface TimelineEntry {
+    id: string
+    actorId: string | null
+    actorLabel: string
+    action: string
+    detail: string
+    timestamp: string
+  }
+
+  const timeline = useMemo<TimelineEntry[]>(() => {
+    const fromActivity: TimelineEntry[] = activity.map((a) => {
+      const actor = a.actor_id ? memberLookup.get(a.actor_id) : undefined
+      const meta = (a.meta ?? {}) as { name?: string }
+      return {
+        id: `act-${a.id}`,
+        actorId: a.actor_id,
+        actorLabel: actor?.full_name ?? actor?.email ?? 'Unknown / removed member',
+        action: a.action,
+        detail: meta.name ? `${meta.name} (${a.entity_type})` : a.entity_type,
+        timestamp: a.created_at,
+      }
+    })
+    const fromLogins: TimelineEntry[] = loginHistory.map((l) => {
+      const match = memberByEmail.get(l.email.toLowerCase())
+      return {
+        id: `login-${l.id}`,
+        actorId: match?.id ?? null,
+        actorLabel: match?.full_name ?? l.email,
+        action: l.success ? 'logged in' : 'failed login',
+        detail: l.email,
+        timestamp: l.created_at,
+      }
+    })
+    return [...fromActivity, ...fromLogins].sort((x, y) => new Date(y.timestamp).getTime() - new Date(x.timestamp).getTime())
+  }, [activity, loginHistory, memberLookup, memberByEmail])
+
+  const activityActionOptions = useMemo(() => Array.from(new Set(timeline.map((t) => t.action))).sort(), [timeline])
+
+  const filteredTimeline = useMemo(() => {
+    return timeline.filter((t) => {
+      if (activityActionFilter !== 'all' && t.action !== activityActionFilter) return false
+      if (activityPersonFilter !== 'all') return t.actorId === activityPersonFilter
+      if (t.actorId && activityExcludedIds.has(t.actorId)) return false
+      return true
+    })
+  }, [timeline, activityPersonFilter, activityExcludedIds, activityActionFilter])
 
   if (loading) return <div className="p-6 text-gray-400 text-sm">Loading…</div>
 
@@ -462,13 +517,73 @@ export default function AdminPanel() {
 
       {tab === 'activity' && (
         <section className="glass-panel">
-          <h3 className="px-5 py-3 border-b border-white/10 font-medium text-sm">Recent activity</h3>
+          <h3 className="px-5 py-3 border-b border-white/10 font-medium text-sm">
+            Activity — who did what, when, and who logged in
+          </h3>
+
+          <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-white/10 text-xs">
+            <select
+              value={activityPersonFilter}
+              onChange={(e) => setActivityPersonFilter(e.target.value)}
+              className="input-field py-1 text-xs w-auto"
+            >
+              <option value="all">Everyone</option>
+              {members.map((m) => (
+                <option key={m.id} value={m.id}>Only: {m.full_name ?? m.email}</option>
+              ))}
+            </select>
+            <select
+              value={activityActionFilter}
+              onChange={(e) => setActivityActionFilter(e.target.value)}
+              className="input-field py-1 text-xs w-auto"
+            >
+              <option value="all">All actions</option>
+              {activityActionOptions.map((a) => (
+                <option key={a} value={a}>{a}</option>
+              ))}
+            </select>
+          </div>
+
+          {activityPersonFilter === 'all' && (
+            <div className="flex flex-wrap items-center gap-1.5 px-5 py-2.5 border-b border-white/10 text-xs">
+              <span className="text-gray-500 shrink-0">Hide:</span>
+              {members.map((m) => {
+                const hidden = activityExcludedIds.has(m.id)
+                return (
+                  <button
+                    key={m.id}
+                    type="button"
+                    onClick={() =>
+                      setActivityExcludedIds((prev) => {
+                        const next = new Set(prev)
+                        if (hidden) next.delete(m.id)
+                        else next.add(m.id)
+                        return next
+                      })
+                    }
+                    className={`px-2 py-0.5 rounded-full border transition-colors ${
+                      hidden ? 'border-magenta/40 text-magenta bg-magenta/10' : 'border-white/10 text-gray-500 hover:text-gray-300'
+                    }`}
+                  >
+                    {m.full_name ?? m.email}
+                  </button>
+                )
+              })}
+            </div>
+          )}
+
           <div className="divide-y divide-white/5 max-h-[70vh] overflow-y-auto">
-            {activity.length === 0 && <p className="px-5 py-4 text-sm text-gray-500">No activity logged yet.</p>}
-            {activity.map((a) => (
-              <div key={a.id} className="px-5 py-2.5 text-sm flex items-center justify-between">
-                <span className="text-gray-300">{a.action} <span className="text-gray-500">{a.entity_type}</span></span>
-                <span className="text-xs text-gray-500">{formatDistanceToNow(new Date(a.created_at), { addSuffix: true })}</span>
+            {filteredTimeline.length === 0 && <p className="px-5 py-4 text-sm text-gray-500">Nothing matches these filters.</p>}
+            {filteredTimeline.map((t) => (
+              <div key={t.id} className="px-5 py-2.5 text-sm flex items-center justify-between gap-3">
+                <div className="min-w-0 flex items-baseline gap-2">
+                  <span className="text-gray-200 font-medium shrink-0">{t.actorLabel}</span>
+                  <span className="text-gray-400 shrink-0">
+                    {t.action}
+                  </span>
+                  <span className="text-gray-500 truncate">{t.detail}</span>
+                </div>
+                <span className="text-xs text-gray-500 shrink-0">{formatDistanceToNow(new Date(t.timestamp), { addSuffix: true })}</span>
               </div>
             ))}
           </div>

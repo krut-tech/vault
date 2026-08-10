@@ -79,3 +79,17 @@ export async function deleteMemberPermanently(memberId: string): Promise<{ mode:
   if (data?.error) throw new Error(data.error)
   return { mode: data.mode }
 }
+
+export interface LoginHistoryRow {
+  id: string
+  email: string
+  success: boolean
+  created_at: string
+}
+
+/** Owner/admin only (RLS: "admin reads login attempts"). Every login attempt, success or failure, by email — not linked to a profile id since a failed attempt may not match any real account. */
+export async function listLoginHistory(limit = 300): Promise<LoginHistoryRow[]> {
+  const { data, error } = await supabase.from('login_attempts').select('id, email, success, created_at').order('created_at', { ascending: false }).limit(limit)
+  if (error) throw error
+  return data
+}

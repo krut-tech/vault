@@ -52,6 +52,10 @@ export default function ProjectView() {
   const uploadFilesInputRef = useRef<HTMLInputElement>(null)
   const uploadFolderInputRef = useRef<HTMLInputElement>(null)
   const importZipInputRef = useRef<HTMLInputElement>(null)
+  // Tracks which open files we've already logged an "edited" activity
+  // event for, so autosave (fires every ~1.2s while typing) doesn't
+  // spam the audit trail — one log entry per file per open-session.
+  const editedThisSessionRef = useRef<Set<string>>(new Set())
 
   const activeFile = useMemo(() => openFiles.find((f) => f.id === activeFileId) ?? null, [openFiles, activeFileId])
 
@@ -117,10 +121,14 @@ export default function ProjectView() {
   }, [id])
 
   function openFile(file: VaultFile) {
-    setOpenFiles((prev) => (prev.some((f) => f.id === file.id) ? prev : [...prev, file]))
+    const alreadyOpen = openFiles.some((f) => f.id === file.id)
+    setOpenFiles((prev) => (alreadyOpen ? prev : [...prev, file]))
     setActiveFileId(file.id)
     setMobilePane('editor')
     if (project) pushRecentFile({ id: file.id, name: file.name, projectId: project.id, projectName: project.name, openedAt: Date.now() })
+    // Only log a genuine "opened" the first time this file is opened in
+    // this visit — re-clicking an already-open tab isn't a new open.
+    if (!alreadyOpen && user) void logActivity(user.id, 'opened', 'file', file.id, { name: file.name, project_id: id })
   }
 
   function closeTab(fileId: string) {
@@ -139,6 +147,7 @@ export default function ProjectView() {
       next.delete(fileId)
       return next
     })
+    editedThisSessionRef.current.delete(fileId)
   }
 
   async function handleCreateFolder(parentId: string | null) {
@@ -730,15 +739,20 @@ export default function ProjectView() {
                 initialContent={activeFile.content}
                 language={activeFile.language}
                 userId={user.id}
-                onDirtyChange={(dirty) =>
+                onDirtyChange={(dirty) => {
                   setDirtyFileIds((prev) => {
                     const has = prev.has(activeFile.id)
                     if (dirty === has) return prev
                     const next = new Set(prev)
-                    dirty ? next.add(activeFile.id) : next.delete(activeFile.id)
+                    if (dirty) next.add(activeFile.id)
+                    else next.delete(activeFile.id)
                     return next
                   })
-                }
+                  if (dirty && user && !editedThisSessionRef.current.has(activeFile.id)) {
+                    editedThisSessionRef.current.add(activeFile.id)
+                    void logActivity(user.id, 'edited', 'file', activeFile.id, { name: activeFile.name, project_id: id })
+                  }
+                }}
               />
             ) : (
               <div className="glass-panel h-full flex items-center justify-center text-gray-500 text-sm text-center px-4">
