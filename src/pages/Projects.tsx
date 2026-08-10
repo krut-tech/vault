@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent, type MouseEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Plus, FolderGit2, Trash2, Pencil, Kanban as KanbanIcon, Timer, ShieldCheck, Activity, StickyNote, LogOut, Lock } from 'lucide-react'
+import { Plus, FolderGit2, Kanban as KanbanIcon, Timer, ShieldCheck, Activity, StickyNote, LogOut, Lock, Pencil, Trash2 } from 'lucide-react'
 import {
   listProjects,
   createProject,
@@ -18,12 +18,15 @@ import { useBrandingStore } from '../store/brandingStore'
 import { useToastStore } from '../store/toastStore'
 import { formatDistanceToNow } from 'date-fns'
 import GlobalSearch from '../components/GlobalSearch'
+import { Button, Input, Textarea, Select, Modal, EmptyState, Badge, LoadingState, ConfirmDialog, PageHeader } from '../components/ui'
 
 export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [editingProject, setEditingProject] = useState<Project | null>(null)
+  const [deletingProject, setDeletingProject] = useState<Project | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
   const user = useAuthStore((s) => s.user)
   const profile = useAuthStore((s) => s.profile)
   const canMakePrivate = profile?.role === 'owner' || profile?.role === 'admin'
@@ -63,13 +66,23 @@ export default function Projects() {
     setEditingProject(project)
   }
 
-  async function handleDelete(e: MouseEvent, project: Project) {
+  function openDeleteConfirm(e: MouseEvent, project: Project) {
     e.preventDefault()
     e.stopPropagation()
-    if (!window.confirm(`Move "${project.name}" to recycle bin? You can restore it later.`)) return
-    await softDeleteProject(project.id)
-    setProjects((prev) => prev.filter((p) => p.id !== project.id))
-    pushToast(`Moved "${project.name}" to recycle bin`, { link: '/recycle-bin', type: 'success' })
+    setDeletingProject(project)
+  }
+
+  async function confirmDelete() {
+    if (!deletingProject) return
+    setDeleteLoading(true)
+    try {
+      await softDeleteProject(deletingProject.id)
+      setProjects((prev) => prev.filter((p) => p.id !== deletingProject.id))
+      pushToast(`Moved "${deletingProject.name}" to recycle bin`, { link: '/recycle-bin', type: 'success' })
+      setDeletingProject(null)
+    } finally {
+      setDeleteLoading(false)
+    }
   }
 
   return (
@@ -111,68 +124,73 @@ export default function Projects() {
             )}
             <span className="hidden lg:inline">{profile?.full_name ?? profile?.email}</span>
           </Link>
-          <button
-            onClick={() => signOut()}
-            title="Sign out"
-            className="flex items-center gap-1.5 text-sm px-2.5 sm:px-3 py-1.5 rounded-lg border border-white/10 hover:border-magenta/50 hover:text-magenta transition-colors"
-          >
+          <Button variant="secondary" size="sm" onClick={() => signOut()} title="Sign out">
             <LogOut size={14} className="sm:hidden" />
             <span className="hidden sm:inline">Sign out</span>
-          </button>
+          </Button>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <div className="min-w-0">
-          <h2 className="text-lg font-semibold">Projects</h2>
-          <p className="text-sm text-gray-500">Your team's code vault, organized by project.</p>
-        </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-1.5 text-sm shrink-0">
-          <Plus size={16} /> New project
-        </button>
+      <div className="mb-6">
+        <PageHeader
+          title="Projects"
+          subtitle="Your team's code vault, organized by project."
+          actions={
+            <Button onClick={() => setShowModal(true)}>
+              <Plus size={16} /> New project
+            </Button>
+          }
+        />
       </div>
 
-      {loading && <p className="text-sm text-gray-500">Loading…</p>}
+      {loading && <LoadingState label="Loading projects…" />}
 
       {!loading && projects.length === 0 && (
-        <div className="glass-panel p-10 text-center text-gray-500">
-          <FolderGit2 className="mx-auto mb-3 text-cyan/50" size={32} />
-          No projects yet. Create your first one.
-        </div>
+        <EmptyState
+          icon={FolderGit2}
+          title="No projects yet"
+          description="Create your first project to start organizing your code."
+          action={
+            <Button onClick={() => setShowModal(true)}>
+              <Plus size={16} /> New project
+            </Button>
+          }
+        />
       )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         {projects.map((p) => {
           const canEdit = profile?.role === 'owner' || p.created_by === user?.id
           return (
-            <Link key={p.id} to={`/projects/${p.id}`} className="group relative glass-panel p-5 hover:glow-border transition-shadow block">
+            <Link
+              key={p.id}
+              to={`/projects/${p.id}`}
+              className="group relative glass-panel p-5 hover:border-white/20 hover:bg-panel/70 transition-colors duration-200 block"
+            >
               <div className="absolute top-3 right-3 flex items-center gap-1 opacity-100 sm:opacity-0 sm:group-hover:opacity-100 transition-opacity">
                 {canEdit && (
-                  <button
-                    onClick={(e) => openEdit(e, p)}
-                    className="p-1.5 rounded-lg text-gray-500 hover:text-cyan hover:bg-white/5"
-                    title="Edit project"
-                  >
+                  <Button variant="tertiary" onClick={(e) => openEdit(e, p)} title="Edit project">
                     <Pencil size={14} />
-                  </button>
+                  </Button>
                 )}
-                <button
-                  onClick={(e) => handleDelete(e, p)}
-                  className="p-1.5 rounded-lg text-gray-500 hover:text-magenta hover:bg-white/5"
+                <Button
+                  variant="tertiary"
+                  className="hover:text-danger"
+                  onClick={(e) => openDeleteConfirm(e, p)}
                   title="Delete project"
                 >
                   <Trash2 size={14} />
-                </button>
+                </Button>
               </div>
               <div className="flex items-center justify-between mb-2 pr-14">
                 <h3 className="font-medium truncate flex items-center gap-1.5">
                   {p.is_private && <Lock size={12} className="text-magenta shrink-0" />}
                   <span className="truncate">{p.name}</span>
                 </h3>
-                <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-violet/15 text-violet shrink-0">{p.language}</span>
+                <Badge variant="accent" className="shrink-0">{p.language}</Badge>
               </div>
-              <p className="text-sm text-gray-500 line-clamp-2 min-h-[2.5rem]">{p.description || 'No description'}</p>
-              <p className="text-xs text-gray-600 mt-3">Updated {formatDistanceToNow(new Date(p.updated_at), { addSuffix: true })}</p>
+              <p className="text-sm text-secondary line-clamp-2 min-h-[2.5rem]">{p.description || 'No description'}</p>
+              <p className="text-xs text-muted mt-3">Updated {formatDistanceToNow(new Date(p.updated_at), { addSuffix: true })}</p>
             </Link>
           )
         })}
@@ -200,6 +218,17 @@ export default function Projects() {
           }}
         />
       )}
+
+      <ConfirmDialog
+        open={Boolean(deletingProject)}
+        onClose={() => setDeletingProject(null)}
+        onConfirm={confirmDelete}
+        title={`Move "${deletingProject?.name}" to recycle bin?`}
+        description="You can restore it later from the recycle bin."
+        confirmLabel="Move to recycle bin"
+        danger
+        loading={deleteLoading}
+      />
     </div>
   )
 }
@@ -264,23 +293,13 @@ function CreateProjectModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <form onSubmit={handleSubmit} className="glass-panel glow-border w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-        <h3 className="font-semibold">New project</h3>
-        <div className="space-y-1.5">
-          <label className="text-xs uppercase tracking-wide text-gray-400">Name</label>
-          <input required className="input-field w-full" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-xs uppercase tracking-wide text-gray-400">Description</label>
-          <textarea className="input-field w-full" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-xs uppercase tracking-wide text-gray-400">Primary language</label>
-          <select className="input-field w-full" value={language} onChange={(e) => setLanguage(e.target.value)}>
-            {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
-          </select>
-        </div>
+    <Modal open onClose={onClose} title="New project" size="md">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
+        <Textarea label="Description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+        <Select label="Primary language" value={language} onChange={(e) => setLanguage(e.target.value)}>
+          {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
+        </Select>
 
         {canMakePrivate && (
           <div className="space-y-3 pt-1 border-t border-white/10">
@@ -293,7 +312,7 @@ function CreateProjectModal({
             {isPrivate && (
               <div className="space-y-1.5">
                 <label className="text-xs uppercase tracking-wide text-gray-400">Grant access to</label>
-                {members.length === 0 && <p className="text-xs text-gray-600">No other team members yet.</p>}
+                {members.length === 0 && <p className="text-xs text-muted">No other team members yet.</p>}
                 <div className="max-h-36 overflow-y-auto space-y-1 rounded-lg border border-white/10 p-2">
                   {members.map((m) => (
                     <label key={m.id} className="flex items-center gap-2 text-sm px-1.5 py-1 rounded-lg hover:bg-white/5 cursor-pointer">
@@ -304,7 +323,7 @@ function CreateProjectModal({
                         className="accent-cyan"
                       />
                       <span className="truncate">{m.full_name ?? m.email}</span>
-                      <span className="text-[10px] text-gray-600 ml-auto shrink-0">{m.role}</span>
+                      <span className="text-[10px] text-muted ml-auto shrink-0">{m.role}</span>
                     </label>
                   ))}
                 </div>
@@ -313,13 +332,13 @@ function CreateProjectModal({
           </div>
         )}
 
-        {error && <p className="text-sm text-magenta">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-xl border border-white/10 hover:border-white/30">Cancel</button>
-          <button type="submit" disabled={submitting} className="btn-primary text-sm">{submitting ? 'Creating…' : 'Create'}</button>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" loading={submitting}>{submitting ? 'Creating…' : 'Create'}</Button>
         </div>
       </form>
-    </div>
+    </Modal>
   )
 }
 
@@ -395,24 +414,13 @@ function EditProjectModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <form onSubmit={handleSubmit} className="glass-panel glow-border w-full max-w-md p-6 space-y-4 max-h-[90vh] overflow-y-auto">
-        <h3 className="font-semibold">Edit project</h3>
-
-        <div className="space-y-1.5">
-          <label className="text-xs uppercase tracking-wide text-gray-400">Name</label>
-          <input required className="input-field w-full" value={name} onChange={(e) => setName(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-xs uppercase tracking-wide text-gray-400">Description</label>
-          <textarea className="input-field w-full" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-        </div>
-        <div className="space-y-1.5">
-          <label className="text-xs uppercase tracking-wide text-gray-400">Primary language</label>
-          <select className="input-field w-full" value={language} onChange={(e) => setLanguage(e.target.value)}>
-            {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
-          </select>
-        </div>
+    <Modal open onClose={onClose} title="Edit project" size="md">
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <Input label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
+        <Textarea label="Description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
+        <Select label="Primary language" value={language} onChange={(e) => setLanguage(e.target.value)}>
+          {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
+        </Select>
 
         {canMakePrivate && (
           <div className="space-y-3 pt-1 border-t border-white/10">
@@ -425,8 +433,8 @@ function EditProjectModal({
             {isPrivate && (
               <div className="space-y-1.5">
                 <label className="text-xs uppercase tracking-wide text-gray-400">Who has access</label>
-                {accessLoading && <p className="text-xs text-gray-600">Loading…</p>}
-                {!accessLoading && members.length === 0 && <p className="text-xs text-gray-600">No other team members yet.</p>}
+                {accessLoading && <LoadingState label="Loading…" />}
+                {!accessLoading && members.length === 0 && <p className="text-xs text-muted">No other team members yet.</p>}
                 {!accessLoading && (
                   <div className="max-h-40 overflow-y-auto space-y-1 rounded-lg border border-white/10 p-2">
                     {members.map((m) => {
@@ -434,12 +442,12 @@ function EditProjectModal({
                       return (
                         <div key={m.id} className="flex items-center gap-2 text-sm px-1.5 py-1 rounded-lg hover:bg-white/5">
                           <span className="truncate flex-1">{m.full_name ?? m.email}</span>
-                          <span className="text-[10px] text-gray-600 shrink-0">{m.role}</span>
+                          <span className="text-[10px] text-muted shrink-0">{m.role}</span>
                           <button
                             type="button"
                             disabled={savingAccessId === m.id}
                             onClick={() => toggleAccess(m.id, granted)}
-                            className={`text-xs px-2.5 py-1 rounded-lg border shrink-0 transition-colors ${
+                            className={`text-xs px-2.5 py-1 rounded-lg border shrink-0 transition-colors duration-150 ${
                               granted
                                 ? 'border-cyan/40 text-cyan hover:border-magenta/50 hover:text-magenta'
                                 : 'border-white/10 text-gray-500 hover:border-cyan/50 hover:text-cyan'
@@ -457,12 +465,12 @@ function EditProjectModal({
           </div>
         )}
 
-        {error && <p className="text-sm text-magenta">{error}</p>}
+        {error && <p className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-xl border border-white/10 hover:border-white/30">Cancel</button>
-          <button type="submit" disabled={submitting} className="btn-primary text-sm">{submitting ? 'Saving…' : 'Save changes'}</button>
+          <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
+          <Button type="submit" loading={submitting}>{submitting ? 'Saving…' : 'Save changes'}</Button>
         </div>
       </form>
-    </div>
+    </Modal>
   )
 }
