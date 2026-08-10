@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams, useSearchParams, Link } from 'react-router-dom'
-import { ArrowLeft, History, Star, Trash2, MessageSquare, Rocket, ScanSearch, FileArchive, X, ChevronRight, GripVertical } from 'lucide-react'
+import { ArrowLeft, History, Star, Trash2, MessageSquare, Rocket, ScanSearch, FileArchive, X, ChevronRight, GripVertical, Lock, FileCode2 } from 'lucide-react'
 import CommentsPanel from '../components/CommentsPanel'
 import DeployPanel from '../components/DeployPanel'
 import CodeScanner from '../components/CodeScanner'
@@ -18,6 +18,7 @@ import { useAuthStore } from '../store/authStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { useToastStore } from '../store/toastStore'
 import { supabase } from '../lib/supabase'
+import { Badge, Button, LoadingState } from '../components/ui'
 
 const MIN_SIDEBAR = 190
 const MAX_SIDEBAR = 480
@@ -559,12 +560,24 @@ export default function ProjectView() {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center">
-        <div className="h-10 w-10 rounded-full border-2 border-cyan/30 border-t-cyan animate-spin" />
+        <LoadingState label="Loading project…" fullHeight />
       </div>
     )
   }
 
-  if (!project) return <div className="p-6 text-gray-400">Project not found.</div>
+  if (!project) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="glass-panel p-8 text-center max-w-sm">
+          <p className="text-sm font-medium text-gray-200">Project not found</p>
+          <p className="text-sm text-secondary mt-1.5">It may have been deleted or you don't have access to it.</p>
+          <Link to="/" className="inline-block mt-4">
+            <Button variant="secondary" size="sm"><ArrowLeft size={14} /> Back to projects</Button>
+          </Link>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="h-screen flex flex-col">
@@ -596,44 +609,50 @@ export default function ProjectView() {
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
           <Link to="/" className="text-gray-400 hover:text-cyan shrink-0"><ArrowLeft size={18} /></Link>
           <h1 className="font-semibold truncate max-w-[45vw] sm:max-w-none">{project.name}</h1>
-          <span className="text-[10px] uppercase tracking-wide px-2 py-0.5 rounded-full bg-violet/15 text-violet shrink-0">{project.language}</span>
-          <button onClick={() => setShowDeploy(true)} className="text-gray-400 hover:text-cyan flex items-center gap-1 text-xs sm:ml-2 shrink-0" title="Deploy">
+          <Badge variant="accent" className="shrink-0">{project.language}</Badge>
+          {project.is_private && (
+            <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-magenta shrink-0" title="Private project">
+              <Lock size={11} /> Private
+            </span>
+          )}
+          <Button variant="tertiary" onClick={() => setShowDeploy(true)} className="sm:ml-2" title="Deploy">
             <Rocket size={14} /> <span className="hidden sm:inline">Deploy</span>
-          </button>
-          <button onClick={() => setShowScanner(true)} className="text-gray-400 hover:text-violet flex items-center gap-1 text-xs shrink-0" title="Code scanner">
+          </Button>
+          <Button variant="tertiary" onClick={() => setShowScanner(true)} className="hover:text-violet" title="Code scanner">
             <ScanSearch size={14} /> <span className="hidden sm:inline">Scan</span>
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="tertiary"
             onClick={handleDownloadZip}
             disabled={zipping || files.length === 0}
-            className="text-gray-400 hover:text-cyan flex items-center gap-1 text-xs disabled:opacity-40 shrink-0"
             title="Download whole project as ZIP"
           >
             <FileArchive size={14} /> <span className="hidden sm:inline">{zipping ? 'Zipping…' : 'Download ZIP'}</span>
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="tertiary"
             onClick={() => importZipInputRef.current?.click()}
             disabled={importingZip}
-            className="text-gray-400 hover:text-violet flex items-center gap-1 text-xs disabled:opacity-40 shrink-0"
+            className="hover:text-violet"
             title="Import a .zip archive into this project"
           >
             <FileArchive size={14} /> <span className="hidden sm:inline">{importingZip ? 'Importing…' : 'Import ZIP'}</span>
-          </button>
+          </Button>
         </div>
         {activeFile && (
           <div className="flex items-center gap-3 shrink-0">
-            <button onClick={handleToggleFavorite} className="text-gray-400 hover:text-violet" title="Toggle favorite">
+            <Button variant="tertiary" onClick={handleToggleFavorite} className="hover:text-violet px-1.5" title="Toggle favorite">
               <Star size={16} className={activeFile.is_favorite ? 'fill-violet text-violet' : ''} />
-            </button>
-            <button onClick={() => setShowHistory(true)} className="text-gray-400 hover:text-cyan" title="Version history">
+            </Button>
+            <Button variant="tertiary" onClick={() => setShowHistory(true)} className="px-1.5" title="Version history">
               <History size={16} />
-            </button>
-            <button onClick={() => setShowComments((v) => !v)} className="text-gray-400 hover:text-violet" title="Comments">
+            </Button>
+            <Button variant="tertiary" onClick={() => setShowComments((v) => !v)} className="hover:text-violet px-1.5" title="Comments">
               <MessageSquare size={16} />
-            </button>
-            <button onClick={handleDeleteFile} className="text-gray-400 hover:text-magenta" title="Delete file">
+            </Button>
+            <Button variant="tertiary" onClick={handleDeleteFile} className="hover:text-danger px-1.5" title="Delete file">
               <Trash2 size={16} />
-            </button>
+            </Button>
           </div>
         )}
       </header>
@@ -755,8 +774,9 @@ export default function ProjectView() {
                 }}
               />
             ) : (
-              <div className="glass-panel h-full flex items-center justify-center text-gray-500 text-sm text-center px-4">
-                Select or create a file to start editing.
+              <div className="glass-panel h-full flex flex-col items-center justify-center text-center px-4 gap-2">
+                <FileCode2 size={28} className="text-cyan/40" />
+                <p className="text-sm text-secondary">Select or create a file to start editing.</p>
               </div>
             )}
           </div>
