@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { ArrowLeft, ShieldCheck, Upload, Plus, Trash2, Mail, RotateCcw, Lock } from 'lucide-react'
-import { listTeamMembers, updateMemberRole, transferOwnership, removeMember, restoreMember, deleteMemberPermanently, listPendingSignups, approveSignup, listLoginHistory, type TeamMember, type LoginHistoryRow } from '../lib/api/admin'
+import { listTeamMembers, updateMemberRole, transferOwnership, removeMember, restoreMember, deleteMemberPermanently, listPendingSignups, approveSignup, sendApprovalEmail, listLoginHistory, type TeamMember, type LoginHistoryRow } from '../lib/api/admin'
 import { listActivity } from '../lib/api/activity'
 import { listProjects, listProjectAccess } from '../lib/api/projects'
 import { uploadLogo } from '../lib/api/branding'
@@ -75,6 +75,14 @@ export default function AdminPanel() {
       await approveSignup(m.id)
       setPending((prev) => prev.filter((p) => p.id !== m.id))
       setMembers((prev) => [...prev, { ...m, is_active: true, approved_at: new Date().toISOString() }])
+      try {
+        await sendApprovalEmail({ email: m.email, name: m.full_name, appName })
+      } catch (emailErr) {
+        // The approval itself succeeded — only the notification email failed.
+        window.alert(
+          `${m.email} was approved, but the notification email failed to send: ${emailErr instanceof Error ? emailErr.message : 'Unknown error'}`
+        )
+      }
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Failed to approve')
     } finally {
