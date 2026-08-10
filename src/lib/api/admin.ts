@@ -32,6 +32,25 @@ export async function approveSignup(id: string) {
 }
 
 /**
+ * Notifies a newly-approved member by email that they can now log in.
+ * Best-effort: failures here shouldn't undo the approval, which has
+ * already happened by the time this is called — callers should catch
+ * and surface this separately from approval errors.
+ */
+export async function sendApprovalEmail(input: { email: string; name: string | null; appName?: string }) {
+  const { data, error } = await supabase.functions.invoke('send-approval-email', {
+    body: {
+      email: input.email,
+      name: input.name,
+      appName: input.appName,
+      appUrl: typeof window !== 'undefined' ? window.location.origin : undefined,
+    },
+  })
+  if (error) throw error
+  return data as { ok: true }
+}
+
+/**
  * Changes an admin's/member's role between 'admin' and 'member'. Cannot
  * be used to grant 'owner' — that only happens via transferOwnership(),
  * since there must always be exactly one owner.
