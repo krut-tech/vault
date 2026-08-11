@@ -1,9 +1,41 @@
 import { useEffect, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft, Plus, Activity, Trash2, RefreshCw } from 'lucide-react'
+import { Plus, Activity, Trash2, RefreshCw } from 'lucide-react'
 import { listMonitors, createMonitor, deleteMonitor, listChecks, runManualCheck, uptimePercentage, type Monitor, type MonitorCheck } from '../lib/api/monitoring'
 import { useAuthStore } from '../store/authStore'
 import { formatDistanceToNow } from 'date-fns'
+import { PageHeader, Card, Button, Badge, EmptyState, LoadingState, Modal, Input } from '../components/ui'
+
+// Real data only — is_up is the only signal the DB actually stores, so
+// "warning" is derived from a genuinely-captured field (response_ms),
+// not invented. down -> danger; up and slow (>2000ms) -> warning;
+// up and fast -> success; nothing checked yet -> unknown.
+const SLOW_THRESHOLD_MS = 2000
+
+type MonitorStatus = 'success' | 'warning' | 'danger' | 'unknown'
+
+function monitorStatus(latest: MonitorCheck | undefined): MonitorStatus {
+  if (!latest) return 'unknown'
+  if (!latest.is_up) return 'danger'
+  if (latest.response_ms != null && latest.response_ms > SLOW_THRESHOLD_MS) return 'warning'
+  return 'success'
+}
+
+const statusLabel: Record<MonitorStatus, string> = { success: 'Up', warning: 'Slow', danger: 'Down', unknown: 'No data' }
+const statusDotClass: Record<MonitorStatus, string> = {
+  success: 'status-dot-success',
+  warning: 'status-dot-warning',
+  danger: 'status-dot-danger',
+  unknown: 'bg-gray-600',
+}
+const statusBadgeVariant: Record<MonitorStatus, 'success' | 'warning' | 'danger' | 'default'> = {
+  success: 'success',
+  warning: 'warning',
+  danger: 'danger',
+  unknown: 'default',
+}
+function statusBarClass(isUp: boolean): string {
+  return isUp ? 'bg-success/60' : 'bg-danger/60'
+}
 
 export default function Monitors() {
   const user = useAuthStore((s) => s.user)
@@ -11,6 +43,7 @@ export default function Monitors() {
   const [checksByMonitor, setChecksByMonitor] = useState<Record<string, MonitorCheck[]>>({})
   const [showForm, setShowForm] = useState(false)
   const [checking, setChecking] = useState(false)
+  const [checkError, setCheckError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   async function refresh() {
@@ -26,11 +59,12 @@ export default function Monitors() {
 
   async function handleRunCheck() {
     setChecking(true)
+    setCheckError(null)
     try {
       await runManualCheck()
       await refresh()
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Check failed — is the check-monitors function deployed?')
+      setCheckError(err instanceof Error ? err.message : 'Check failed — is the check-monitors function deployed?')
     } finally {
       setChecking(false)
     }
@@ -42,63 +76,89 @@ export default function Monitors() {
     setMonitors((prev) => prev.filter((m) => m.id !== id))
   }
 
-  if (loading) return <div className="p-6 text-gray-400 text-sm">Loading…</div>
+  if (loading) return <div className="p-6"><LoadingState fullHeight label="Loading monitors…" /></div>
 
   return (
     <div className="p-6 max-w-4xl mx-auto space-y-6">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link to="/" className="text-gray-400 hover:text-cyan"><ArrowLeft size={18} /></Link>
-          <h2 className="text-lg font-semibold">Site monitoring</h2>
-        </div>
-        <div className="flex items-center gap-2">
-          <button onClick={handleRunCheck} disabled={checking} className="text-sm px-3 py-1.5 rounded-lg border border-white/10 hover:border-cyan/50 hover:text-cyan flex items-center gap-1.5">
-            <RefreshCw size={14} className={checking ? 'animate-spin' : ''} /> Check now
-          </button>
-          <button onClick={() => setShowForm(true)} className="btn-primary flex items-center gap-1.5 text-sm">
-            <Plus size={16} /> Add monitor
-          </button>
-        </div>
-      </div>
+      <PageHeader
+        title="Site monitoring"
+        backTo="/"
+        actions={
+          <>
+            <Button variant="secondary" size="sm" onClick={handleRunCheck} disabled={checking}>
+              <RefreshCw size={14} className={checking ? 'animate-spin' : ''} /> Check now
+            </Button>
+            <Button variant="primary" size="sm" onClick={() => setShowForm(true)}>
+              <Plus size={16} /> Add monitor
+            </Button>
+          </>
+        }
+      />
 
-      {monitors.length === 0 && (
-        <div className="glass-panel p-10 text-center text-gray-500">
-          <Activity className="mx-auto mb-3 text-cyan/50" size={32} />
-          No monitors yet. Add a URL to start tracking uptime.
+      {checkError && (
+        <div className="glass-panel border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger flex items-center justify-between gap-3">
+          <span>{checkError}</span>
+          <button onClick={() => setCheckError(null)} className="text-danger/70 hover:text-danger shrink-0">Dismiss</button>
         </div>
       )}
 
-      <div className="space-y-3">
-        {monitors.map((m) => {
-          const checks = checksByMonitor[m.id] ?? []
-          const latest = checks[0]
-          const uptime = uptimePercentage(checks)
-          return (
-            <div key={m.id} className="glass-panel p-4">
-              <div className="flex items-center justify-between mb-2">
-                <div className="flex items-center gap-2 min-w-0">
-                  <span className={`h-2.5 w-2.5 rounded-full shrink-0 ${latest ? (latest.is_up ? 'bg-cyan' : 'bg-magenta') : 'bg-gray-600'}`} />
-                  <div className="min-w-0">
-                    <p className="text-sm truncate">{m.name}</p>
-                    <p className="text-xs text-gray-500 truncate">{m.url}</p>
+      {monitors.length === 0 ? (
+        <EmptyState
+          icon={Activity}
+          title="No monitors yet"
+          description="Add a URL to start tracking uptime."
+          action={
+            <Button variant="primary" size="sm" onClick={() => setShowForm(true)}>
+              <Plus size={14} /> Add monitor
+            </Button>
+          }
+        />
+      ) : (
+        <div className="space-y-3">
+          {monitors.map((m) => {
+            const checks = checksByMonitor[m.id] ?? []
+            const latest = checks[0]
+            const uptime = uptimePercentage(checks)
+            const status = monitorStatus(latest)
+            return (
+              <Card key={m.id}>
+                <div className="flex items-center justify-between gap-3 mb-2 flex-wrap">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <span className={`h-2.5 w-2.5 rounded-full shrink-0 status-dot ${statusDotClass[status]}`} />
+                    <div className="min-w-0">
+                      <p className="text-sm truncate">{m.name}</p>
+                      <p className="text-xs text-secondary truncate">{m.url}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-3 shrink-0">
+                    <Badge variant={statusBadgeVariant[status]}>{statusLabel[status]}</Badge>
+                    {uptime !== null && <span className="text-xs text-secondary">{uptime}% uptime</span>}
+                    {latest?.response_ms != null && <span className="text-xs text-secondary">{latest.response_ms}ms</span>}
+                    {latest && (
+                      <span className="text-xs text-muted hidden sm:inline">
+                        checked {formatDistanceToNow(new Date(latest.checked_at), { addSuffix: true })}
+                      </span>
+                    )}
+                    <button onClick={() => handleDelete(m.id)} className="text-gray-500 hover:text-danger" title="Remove monitor">
+                      <Trash2 size={14} />
+                    </button>
                   </div>
                 </div>
-                <div className="flex items-center gap-4 shrink-0">
-                  {uptime !== null && <span className="text-xs text-gray-400">{uptime}% uptime</span>}
-                  {latest?.response_ms != null && <span className="text-xs text-gray-400">{latest.response_ms}ms</span>}
-                  <button onClick={() => handleDelete(m.id)} className="text-gray-500 hover:text-magenta"><Trash2 size={14} /></button>
+                <div className="flex gap-0.5 mt-2">
+                  {checks.slice(0, 30).reverse().map((c) => (
+                    <div
+                      key={c.id}
+                      title={`${c.is_up ? 'Up' : 'Down'} · ${formatDistanceToNow(new Date(c.checked_at), { addSuffix: true })}`}
+                      className={`h-6 flex-1 rounded-sm ${statusBarClass(c.is_up)}`}
+                    />
+                  ))}
+                  {checks.length === 0 && <p className="text-xs text-muted">No checks recorded yet — click "Check now".</p>}
                 </div>
-              </div>
-              <div className="flex gap-0.5 mt-2">
-                {checks.slice(0, 30).reverse().map((c) => (
-                  <div key={c.id} title={`${c.is_up ? 'Up' : 'Down'} · ${formatDistanceToNow(new Date(c.checked_at), { addSuffix: true })}`} className={`h-6 flex-1 rounded-sm ${c.is_up ? 'bg-cyan/60' : 'bg-magenta/60'}`} />
-                ))}
-                {checks.length === 0 && <p className="text-xs text-gray-600">No checks recorded yet — click "Check now".</p>}
-              </div>
-            </div>
-          )
-        })}
-      </div>
+              </Card>
+            )
+          })}
+        </div>
+      )}
 
       {showForm && user && (
         <MonitorForm userId={user.id} onCreated={() => { setShowForm(false); refresh() }} onCancel={() => setShowForm(false)} />
@@ -125,23 +185,32 @@ function MonitorForm({ userId, onCreated, onCancel }: { userId: string; onCreate
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <form onSubmit={handleSubmit} className="glass-panel glow-border w-full max-w-sm p-6 space-y-4">
-        <h3 className="font-semibold">New monitor</h3>
-        <input required className="input-field w-full" placeholder="Name" value={name} onChange={(e) => setName(e.target.value)} />
-        <input required type="url" className="input-field w-full" placeholder="https://example.com" value={url} onChange={(e) => setUrl(e.target.value)} />
-        <div className="space-y-1.5">
-          <label className="text-xs uppercase tracking-wide text-gray-400">Check interval (minutes)</label>
-          <input type="number" min={1} className="input-field w-full" value={interval} onChange={(e) => setInterval_(Number(e.target.value))} />
-        </div>
-        <p className="text-xs text-gray-500">
+    <Modal
+      open
+      onClose={onCancel}
+      title="New monitor"
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" size="sm" onClick={onCancel} disabled={submitting}>Cancel</Button>
+          <Button variant="primary" size="sm" type="submit" form="monitor-form" loading={submitting}>Add monitor</Button>
+        </>
+      }
+    >
+      <form id="monitor-form" onSubmit={handleSubmit} className="space-y-4">
+        <Input required label="Name" placeholder="My website" value={name} onChange={(e) => setName(e.target.value)} />
+        <Input required type="url" label="URL" placeholder="https://example.com" value={url} onChange={(e) => setUrl(e.target.value)} />
+        <Input
+          type="number"
+          min={1}
+          label="Check interval (minutes)"
+          value={interval}
+          onChange={(e) => setInterval_(Number(e.target.value))}
+        />
+        <p className="text-xs text-muted">
           Automatic scheduling requires a one-time pg_cron setup (see supabase/migrations/0003_vault_and_cron.sql). You can always trigger a check manually with "Check now".
         </p>
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onCancel} className="px-4 py-2 text-sm rounded-xl border border-white/10 hover:border-white/30">Cancel</button>
-          <button type="submit" disabled={submitting} className="btn-primary text-sm">{submitting ? 'Adding…' : 'Add monitor'}</button>
-        </div>
       </form>
-    </div>
+    </Modal>
   )
 }
