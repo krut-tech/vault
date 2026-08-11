@@ -1,6 +1,25 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { Folder as FolderIcon, FolderOpen, FileCode2, FileText, Star, Plus, Upload, FolderUp, Download, Trash2, Pencil, Copy, FolderInput } from 'lucide-react'
+import {
+  Folder as FolderIcon,
+  FolderOpen,
+  FileCode2,
+  FileText,
+  Star,
+  Plus,
+  Upload,
+  FolderUp,
+  Download,
+  Trash2,
+  Pencil,
+  Copy,
+  FolderInput,
+  ChevronRight,
+  FolderPlus,
+  FilePlus2,
+  Inbox,
+} from 'lucide-react'
 import type { Folder, VaultFile, PdfFile } from '../types/vault'
+import { Modal, Select } from './ui'
 
 interface Props {
   folders: Folder[]
@@ -177,13 +196,13 @@ export default function FileTree({
       <div className="relative" onClick={(e) => e.stopPropagation()}>
         <button
           onClick={() => setUploadMenuFor(open ? null : key)}
-          className="text-gray-500 hover:text-cyan"
+          className="text-muted hover:text-cyan transition-colors duration-150"
           title="Upload file"
         >
           <Upload size={folderId === null ? 14 : 12} />
         </button>
         {open && (
-          <div className="absolute z-20 top-full right-0 mt-1 w-32 glass-panel py-1 text-xs shadow-lg">
+          <div className="absolute z-20 top-full right-0 mt-1 w-32 glass-panel py-1 text-xs motion-safe:animate-[fadeIn_0.15s_ease-out]">
             <label
               htmlFor={codeInputId}
               className="block px-3 py-1.5 hover:bg-white/5 cursor-pointer text-gray-300"
@@ -235,16 +254,20 @@ export default function FileTree({
     return (
       <div key={folder.id}>
         <div
-          className="group flex items-center gap-1.5 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-sm"
-          style={{ paddingLeft: depth * 14 + 8 }}
+          className="group flex items-center gap-1 px-2 py-1.5 rounded-lg hover:bg-white/5 cursor-pointer text-sm transition-colors duration-150"
+          style={{ paddingLeft: depth * 14 + 4 }}
           onClick={() => toggle(folder.id)}
           onContextMenu={(e) => openContextMenu(e, { kind: 'folder', item: folder })}
         >
+          <ChevronRight
+            size={12}
+            className={`shrink-0 text-muted transition-transform duration-150 ${isOpen ? 'rotate-90' : ''}`}
+          />
           {isOpen ? <FolderOpen size={15} className="text-cyan shrink-0" /> : <FolderIcon size={15} className="text-cyan/70 shrink-0" />}
           <span className="truncate flex-1">{folder.name}</span>
           <button
             onClick={(e) => { e.stopPropagation(); onCreateFile(folder.id) }}
-            className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-cyan"
+            className="opacity-0 group-hover:opacity-100 text-muted hover:text-cyan transition-colors duration-150"
             aria-label={`New file in ${folder.name}`}
             title="New file"
           >
@@ -271,19 +294,19 @@ export default function FileTree({
       <div
         key={file.id}
         onContextMenu={(e) => openContextMenu(e, { kind: 'file', item: file })}
-        className={`group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm hover:bg-white/5 transition-colors ${
-          active ? 'bg-cyan/10 text-cyan' : 'text-gray-300'
+        className={`group flex items-center gap-1.5 pr-2 py-1.5 rounded-lg text-sm transition-colors duration-150 border-l-2 ${
+          active ? 'bg-cyan/10 text-cyan border-cyan' : 'text-gray-300 border-transparent hover:bg-white/5'
         }`}
-        style={{ paddingLeft: depth * 14 + 8 }}
+        style={{ paddingLeft: depth * 14 + 16 }}
       >
         <button onClick={() => onSelectFile(file)} className="flex items-center gap-1.5 flex-1 min-w-0 text-left">
-          <FileCode2 size={14} className="shrink-0 opacity-70" />
+          <FileCode2 size={14} className={`shrink-0 ${active ? 'opacity-100' : 'opacity-60'}`} />
           <span className="truncate flex-1">{file.name}</span>
           {file.is_favorite && <Star size={12} className="text-violet fill-violet shrink-0" />}
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onDownloadFile(file) }}
-          className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-cyan shrink-0"
+          className="opacity-0 group-hover:opacity-100 text-muted hover:text-cyan shrink-0 transition-colors duration-150"
           title="Download file"
         >
           <Download size={13} />
@@ -296,8 +319,8 @@ export default function FileTree({
     return (
       <div
         key={pdf.id}
-        className="group flex items-center gap-1.5 px-2 py-1.5 rounded-lg text-sm hover:bg-white/5 transition-colors text-gray-300"
-        style={{ paddingLeft: depth * 14 + 8 }}
+        className="group flex items-center gap-1.5 pr-2 py-1.5 rounded-lg text-sm hover:bg-white/5 transition-colors duration-150 text-gray-300 border-l-2 border-transparent"
+        style={{ paddingLeft: depth * 14 + 16 }}
       >
         <button onClick={() => onDownloadPdf(pdf)} className="flex items-center gap-1.5 flex-1 min-w-0 text-left" title="Open PDF">
           <FileText size={14} className="shrink-0 opacity-70 text-magenta" />
@@ -305,14 +328,14 @@ export default function FileTree({
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onDownloadPdf(pdf) }}
-          className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-cyan shrink-0"
+          className="opacity-0 group-hover:opacity-100 text-muted hover:text-cyan shrink-0 transition-colors duration-150"
           title="Download PDF"
         >
           <Download size={13} />
         </button>
         <button
           onClick={(e) => { e.stopPropagation(); onDeletePdf(pdf) }}
-          className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-magenta shrink-0"
+          className="opacity-0 group-hover:opacity-100 text-muted hover:text-danger shrink-0 transition-colors duration-150"
           title="Delete PDF"
         >
           <Trash2 size={13} />
@@ -324,16 +347,33 @@ export default function FileTree({
   const rootFolders = childrenOf.get(null) ?? []
   const rootFiles = filesOf.get(null) ?? []
   const rootPdfs = pdfsOf.get(null) ?? []
+  const isEmpty = rootFolders.length === 0 && rootFiles.length === 0 && rootPdfs.length === 0
 
   return (
     <div className="glass-panel h-full overflow-y-auto p-2 relative">
-      <div className="flex items-center justify-between px-2 py-1.5 mb-1 flex-wrap gap-y-1">
-        <span className="text-xs uppercase tracking-wide text-gray-500">Explorer</span>
-        <div className="flex gap-2.5 items-center">
-          <button onClick={() => onCreateFolder(null)} className="text-gray-500 hover:text-cyan text-xs" title="New folder">+ Folder</button>
-          <button onClick={() => onCreateFile(null)} className="text-gray-500 hover:text-violet text-xs" title="New file">+ File</button>
+      <div className="flex items-center justify-between px-2 py-1.5 mb-1 flex-wrap gap-y-1.5">
+        <span className="text-xs font-medium uppercase tracking-wide text-muted">Explorer</span>
+        <div className="flex gap-3 items-center">
+          <button
+            onClick={() => onCreateFolder(null)}
+            className="flex items-center gap-1 text-muted hover:text-cyan text-xs transition-colors duration-150"
+            title="New folder"
+          >
+            <FolderPlus size={13} /> <span className="hidden sm:inline">Folder</span>
+          </button>
+          <button
+            onClick={() => onCreateFile(null)}
+            className="flex items-center gap-1 text-muted hover:text-violet text-xs transition-colors duration-150"
+            title="New file"
+          >
+            <FilePlus2 size={13} /> <span className="hidden sm:inline">File</span>
+          </button>
           {renderUploadMenu('root', null)}
-          <button onClick={() => rootFolderInputRef.current?.click()} className="text-gray-500 hover:text-violet" title="Upload folder">
+          <button
+            onClick={() => rootFolderInputRef.current?.click()}
+            className="text-muted hover:text-violet transition-colors duration-150"
+            title="Upload folder"
+          >
             <FolderUp size={14} />
           </button>
           <input
@@ -352,61 +392,55 @@ export default function FileTree({
       {rootFolders.map((f) => renderFolder(f, 0))}
       {rootFiles.map((f) => renderFile(f, 0))}
       {rootPdfs.map((p) => renderPdf(p, 0))}
-      {rootFolders.length === 0 && rootFiles.length === 0 && rootPdfs.length === 0 && (
-        <p className="px-2 py-4 text-xs text-gray-500">Empty. Create a folder/file, or upload from your computer.</p>
+      {isEmpty && (
+        <div className="flex flex-col items-center text-center px-4 py-8 gap-2">
+          <Inbox size={22} className="text-muted" />
+          <p className="text-xs text-secondary">Empty. Create a folder/file, or upload from your computer.</p>
+        </div>
       )}
 
       {contextMenu && (
         <div
-          className="fixed z-50 w-40 glass-panel py-1 text-sm shadow-lg"
+          className="fixed z-50 w-40 glass-panel py-1 text-sm motion-safe:animate-[fadeIn_0.15s_ease-out]"
           style={{ left: contextMenu.x, top: contextMenu.y }}
           onClick={(e) => e.stopPropagation()}
         >
-          <button onClick={() => handleContextAction('rename')} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 text-left text-gray-300">
+          <button onClick={() => handleContextAction('rename')} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 text-left text-gray-300 transition-colors duration-150">
             <Pencil size={13} /> Rename
           </button>
           {contextMenu.target.kind === 'file' && (
-            <button onClick={() => handleContextAction('duplicate')} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 text-left text-gray-300">
+            <button onClick={() => handleContextAction('duplicate')} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 text-left text-gray-300 transition-colors duration-150">
               <Copy size={13} /> Duplicate
             </button>
           )}
-          <button onClick={() => handleContextAction('move')} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 text-left text-gray-300">
+          <button onClick={() => handleContextAction('move')} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 text-left text-gray-300 transition-colors duration-150">
             <FolderInput size={13} /> Move to…
           </button>
-          <button onClick={() => handleContextAction('delete')} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 text-left text-magenta">
+          <button onClick={() => handleContextAction('delete')} className="w-full flex items-center gap-2 px-3 py-1.5 hover:bg-white/5 text-left text-danger transition-colors duration-150">
             <Trash2 size={13} /> Delete
           </button>
         </div>
       )}
 
-      {moveTarget && (
-        <div className="fixed inset-0 z-[90] flex items-center justify-center px-4" role="presentation">
-          <div className="fixed inset-0 bg-black/60" onClick={() => setMoveTarget(null)} aria-hidden="true" />
-          <div role="dialog" aria-modal="true" aria-label="Move to folder" className="relative w-full max-w-xs glass-panel glow-border p-4">
-            <p className="text-sm font-medium mb-3">
-              Move "{moveTarget.item.name}" to…
-            </p>
-            <select
-              defaultValue=""
-              autoFocus
-              onChange={(e) => {
-                const value = e.target.value === '__root__' ? null : e.target.value
-                if (moveTarget.kind === 'file') onMoveFile(moveTarget.item, value)
-                else onMoveFolder(moveTarget.item, value)
-                setMoveTarget(null)
-              }}
-              className="input-field w-full text-sm"
-            >
-              <option value="" disabled>Choose a destination…</option>
-              <option value="__root__">Root (no folder)</option>
-              {folderOptions.map((o) => (
-                <option key={o.id} value={o.id}>{o.label}</option>
-              ))}
-            </select>
-            <button onClick={() => setMoveTarget(null)} className="mt-3 text-xs text-gray-500 hover:text-gray-300">Cancel</button>
-          </div>
-        </div>
-      )}
+      <Modal open={Boolean(moveTarget)} onClose={() => setMoveTarget(null)} title={`Move "${moveTarget?.item.name}" to…`} size="sm">
+        <Select
+          defaultValue=""
+          autoFocus
+          onChange={(e) => {
+            if (!moveTarget) return
+            const value = e.target.value === '__root__' ? null : e.target.value
+            if (moveTarget.kind === 'file') onMoveFile(moveTarget.item, value)
+            else onMoveFolder(moveTarget.item, value)
+            setMoveTarget(null)
+          }}
+        >
+          <option value="" disabled>Choose a destination…</option>
+          <option value="__root__">Root (no folder)</option>
+          {folderOptions.map((o) => (
+            <option key={o.id} value={o.id}>{o.label}</option>
+          ))}
+        </Select>
+      </Modal>
     </div>
   )
 }
