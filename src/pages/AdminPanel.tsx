@@ -1,7 +1,19 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft, ShieldCheck, Upload, Plus, Trash2, Mail, RotateCcw, Lock } from 'lucide-react'
-import { listTeamMembers, updateMemberRole, transferOwnership, removeMember, restoreMember, deleteMemberPermanently, listPendingSignups, approveSignup, sendApprovalEmail, listLoginHistory, type TeamMember, type LoginHistoryRow } from '../lib/api/admin'
+import { useEffect, useMemo, useRef, useState, type ChangeEvent, type FormEvent } from 'react'
+import { ShieldCheck, Upload, Plus, Trash2, Mail, RotateCcw, Lock } from 'lucide-react'
+import {
+  listTeamMembers,
+  updateMemberRole,
+  transferOwnership,
+  removeMember,
+  restoreMember,
+  deleteMemberPermanently,
+  listPendingSignups,
+  approveSignup,
+  sendApprovalEmail,
+  listLoginHistory,
+  type TeamMember,
+  type LoginHistoryRow,
+} from '../lib/api/admin'
 import { listActivity } from '../lib/api/activity'
 import { listProjects, listProjectAccess } from '../lib/api/projects'
 import { uploadLogo } from '../lib/api/branding'
@@ -11,6 +23,7 @@ import { useBrandingStore } from '../store/brandingStore'
 import { formatDistanceToNow } from 'date-fns'
 import type { Database } from '../types/database'
 import type { Project, ProjectAccessEntry } from '../types/vault'
+import { Badge, Button, Card, ConfirmDialog, EmptyState, Input, LoadingState, PageHeader, Select } from '../components/ui'
 
 type ActivityRow = Database['public']['Tables']['activity_log']['Row']
 
@@ -43,6 +56,16 @@ export default function AdminPanel() {
   const [newIpNote, setNewIpNote] = useState('')
 
   const [tab, setTab] = useState<'overview' | 'team' | 'security' | 'activity'>('overview')
+
+  // Confirmation-dialog targets. Each mirrors a window.confirm() that used to
+  // gate the corresponding handler — the underlying async logic is unchanged,
+  // only the confirmation UI moved from a native popup to ConfirmDialog.
+  const [rejectTarget, setRejectTarget] = useState<TeamMember | null>(null)
+  const [removeTarget, setRemoveTarget] = useState<TeamMember | null>(null)
+  const [restoreTarget, setRestoreTarget] = useState<TeamMember | null>(null)
+  const [deleteTarget, setDeleteTarget] = useState<TeamMember | null>(null)
+  const [ownerTransferTarget, setOwnerTransferTarget] = useState<TeamMember | null>(null)
+  const [transferLoading, setTransferLoading] = useState(false)
 
   useEffect(() => {
     Promise.all([listTeamMembers(), listActivity(500), listProjects(), load(), listAllowlist(), listPendingSignups(), listLoginHistory(300)]).then(([m, a, p, , al, pd, lh]) => {
@@ -90,75 +113,91 @@ export default function AdminPanel() {
     }
   }
 
-  async function handleReject(m: TeamMember) {
-    if (!window.confirm(`Reject the signup from ${m.full_name ?? m.email}? They won't be able to log in.`)) return
+  async function confirmReject() {
+    if (!rejectTarget) return
+    setMemberActionId(rejectTarget.id)
     try {
-      await removeMember(m.id)
-      setPending((prev) => prev.filter((p) => p.id !== m.id))
+      await removeMember(rejectTarget.id)
+      setPending((prev) => prev.filter((p) => p.id !== rejectTarget.id))
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Failed to reject')
+    } finally {
+      setMemberActionId(null)
+      setRejectTarget(null)
     }
   }
 
-  async function handleRoleChange(id: string, role: 'owner' | 'admin' | 'member') {
+  function onRoleSelectChange(m: TeamMember, role: 'owner' | 'admin' | 'member') {
     if (role === 'owner') {
-      const target = members.find((m) => m.id === id)
-      if (!window.confirm(`Make ${target?.full_name ?? target?.email} the owner? You'll be demoted to admin — there can only be one owner.`)) return
-      try {
-        await transferOwnership(id)
-        setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, role: 'owner' } : m.id === profile?.id ? { ...m, role: 'admin' } : m)))
-        await refreshProfile()
-      } catch (err) {
-        window.alert(err instanceof Error ? err.message : 'Failed to transfer ownership')
-      }
+      setOwnerTransferTarget(m)
       return
     }
+    performRoleChange(m.id, role)
+  }
+
+  async function performRoleChange(id: string, role: 'admin' | 'member') {
     await updateMemberRole(id, role)
     setMembers((prev) => prev.map((m) => (m.id === id ? { ...m, role } : m)))
   }
 
-  async function handleRemoveMember(m: TeamMember) {
-    if (!window.confirm(`Remove ${m.full_name ?? m.email} from the team? They won't be able to log in anymore, but their projects/files stay intact.`)) return
+  async function confirmOwnerTransfer() {
+    if (!ownerTransferTarget) return
+    setTransferLoading(true)
     try {
-      await removeMember(m.id)
-      setMembers((prev) => prev.map((p) => (p.id === m.id ? { ...p, is_active: false } : p)))
+      await transferOwnership(ownerTransferTarget.id)
+      setMembers((prev) => prev.map((m) => (m.id === ownerTransferTarget.id ? { ...m, role: 'owner' } : m.id === profile?.id ? { ...m, role: 'admin' } : m)))
+      await refreshProfile()
     } catch (err) {
-      window.alert(err instanceof Error ? err.message : 'Failed to remove member')
+      window.alert(err instanceof Error ? err.message : 'Failed to transfer ownership')
+    } finally {
+      setTransferLoading(false)
+      setOwnerTransferTarget(null)
     }
   }
 
-  async function handleRestoreMember(m: TeamMember) {
-    if (!window.confirm(`Restore ${m.full_name ?? m.email}'s access? They'll be able to log in again.`)) return
-    setMemberActionId(m.id)
+  async function confirmRemoveMember() {
+    if (!removeTarget) return
+    setMemberActionId(removeTarget.id)
     try {
-      await restoreMember(m.id)
-      setMembers((prev) => prev.map((p) => (p.id === m.id ? { ...p, is_active: true } : p)))
+      await removeMember(removeTarget.id)
+      setMembers((prev) => prev.map((p) => (p.id === removeTarget.id ? { ...p, is_active: false } : p)))
+    } catch (err) {
+      window.alert(err instanceof Error ? err.message : 'Failed to remove member')
+    } finally {
+      setMemberActionId(null)
+      setRemoveTarget(null)
+    }
+  }
+
+  async function confirmRestoreMember() {
+    if (!restoreTarget) return
+    setMemberActionId(restoreTarget.id)
+    try {
+      await restoreMember(restoreTarget.id)
+      setMembers((prev) => prev.map((p) => (p.id === restoreTarget.id ? { ...p, is_active: true } : p)))
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Failed to restore member')
     } finally {
       setMemberActionId(null)
+      setRestoreTarget(null)
     }
   }
 
-  async function handleDeleteMemberPermanently(m: TeamMember) {
-    if (
-      !window.confirm(
-        `Permanently delete ${m.full_name ?? m.email}?\n\nThis cannot be undone. If they never created anything, their account is deleted outright. If they authored projects/files/tasks, their row is kept as "Deleted member" only so that past work stays attributed — but their email, name, and avatar are wiped from the database.`,
-      )
-    )
-      return
-    setMemberActionId(m.id)
+  async function confirmDeletePermanently() {
+    if (!deleteTarget) return
+    setMemberActionId(deleteTarget.id)
     try {
-      const { mode } = await deleteMemberPermanently(m.id)
+      const { mode } = await deleteMemberPermanently(deleteTarget.id)
       if (mode === 'deleted') {
-        setMembers((prev) => prev.filter((p) => p.id !== m.id))
+        setMembers((prev) => prev.filter((p) => p.id !== deleteTarget.id))
       } else {
-        setMembers((prev) => prev.map((p) => (p.id === m.id ? { ...p, deleted_at: new Date().toISOString() } : p)))
+        setMembers((prev) => prev.map((p) => (p.id === deleteTarget.id ? { ...p, deleted_at: new Date().toISOString() } : p)))
       }
     } catch (err) {
       window.alert(err instanceof Error ? err.message : 'Failed to delete member')
     } finally {
       setMemberActionId(null)
+      setDeleteTarget(null)
     }
   }
 
@@ -190,7 +229,7 @@ export default function AdminPanel() {
     }
   }
 
-  async function handleLogoChange(e: React.ChangeEvent<HTMLInputElement>) {
+  async function handleLogoChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
     if (!file || !user) return
     setUploadingLogo(true)
@@ -252,15 +291,18 @@ export default function AdminPanel() {
     })
   }, [timeline, activityPersonFilter, activityExcludedIds, activityActionFilter])
 
-  if (loading) return <div className="p-6 text-gray-400 text-sm">Loading…</div>
+  if (loading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <LoadingState label="Loading admin panel…" fullHeight />
+      </div>
+    )
+  }
 
   if (!isAllowed) {
     return (
       <div className="p-6 max-w-2xl mx-auto">
-        <div className="glass-panel p-8 text-center text-gray-400">
-          <ShieldCheck className="mx-auto mb-3 text-magenta/60" size={32} />
-          Admin access required. Ask an owner to promote your account.
-        </div>
+        <EmptyState icon={ShieldCheck} title="Admin access required" description="Ask an owner to promote your account." />
       </div>
     )
   }
@@ -270,10 +312,7 @@ export default function AdminPanel() {
 
   return (
     <div className="p-3 sm:p-6 max-w-5xl mx-auto space-y-4 sm:space-y-6">
-      <div className="flex items-center gap-3">
-        <Link to="/" className="text-gray-400 hover:text-cyan"><ArrowLeft size={18} /></Link>
-        <h2 className="text-lg font-semibold">Admin panel</h2>
-      </div>
+      <PageHeader title="Admin panel" backTo="/" subtitle="Manage your team, branding, security, and activity." />
 
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4">
         <StatCard label="Team members" value={members.filter((m) => m.approved_at && m.is_active).length} />
@@ -283,7 +322,7 @@ export default function AdminPanel() {
         <StatCard label="Logged actions" value={activity.length} />
       </div>
 
-      <div className="flex glass-panel p-1 gap-1 text-xs sm:text-sm overflow-x-auto">
+      <div className="flex glass-panel p-1 gap-1 text-xs sm:text-sm overflow-x-auto" role="tablist" aria-label="Admin panel sections">
         {([
           ['overview', 'Overview', pending.length],
           ['team', 'Team', removedCount],
@@ -293,15 +332,15 @@ export default function AdminPanel() {
           <button
             key={key}
             type="button"
+            role="tab"
+            aria-selected={tab === key}
             onClick={() => setTab(key)}
-            className={`flex-1 min-w-fit px-3 py-1.5 rounded-lg transition-colors whitespace-nowrap flex items-center justify-center gap-1.5 ${
-              tab === key ? 'bg-cyan/15 text-cyan' : 'text-gray-400 hover:text-gray-200'
+            className={`flex-1 min-w-fit px-3 py-1.5 rounded-lg transition-colors duration-150 whitespace-nowrap flex items-center justify-center gap-1.5 ${
+              tab === key ? 'bg-cyan/15 text-cyan' : 'text-secondary hover:text-gray-200'
             }`}
           >
             {label}
-            {badge > 0 && (
-              <span className="text-[10px] leading-none px-1.5 py-0.5 rounded-full bg-magenta/20 text-magenta">{badge}</span>
-            )}
+            {badge > 0 && <Badge variant="warning">{badge}</Badge>}
           </button>
         ))}
       </div>
@@ -309,118 +348,121 @@ export default function AdminPanel() {
       {tab === 'overview' && (
         <div className="space-y-4 sm:space-y-6">
           {pending.length > 0 && (
-            <section className="glass-panel">
+            <Card noPadding>
               <h3 className="px-5 py-3 border-b border-white/10 font-medium text-sm flex items-center gap-2">
                 <Mail size={14} className="text-cyan" /> Pending approval
               </h3>
               <div className="divide-y divide-white/5">
                 {pending.map((p) => (
-                  <div key={p.id} className="flex items-center justify-between px-5 py-3">
+                  <div key={p.id} className="flex items-center justify-between gap-3 px-5 py-3">
                     <div className="min-w-0">
                       <p className="text-sm truncate">{p.full_name ?? p.email}</p>
-                      <p className="text-xs text-gray-500 truncate">{p.email}</p>
+                      <p className="text-xs text-secondary truncate">{p.email}</p>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <button
-                        onClick={() => handleApprove(p)}
-                        disabled={approvingId === p.id}
-                        className="btn-primary text-xs px-3 py-1.5"
-                      >
+                      <Button size="sm" onClick={() => handleApprove(p)} loading={approvingId === p.id}>
                         {approvingId === p.id ? 'Approving…' : 'Approve'}
-                      </button>
-                      <button
-                        onClick={() => handleReject(p)}
-                        className="text-xs px-3 py-1.5 rounded-lg border border-white/10 text-gray-400 hover:text-magenta hover:border-magenta/40"
-                      >
+                      </Button>
+                      <Button size="sm" variant="secondary" onClick={() => setRejectTarget(p)}>
                         Reject
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ))}
               </div>
-            </section>
+            </Card>
           )}
 
-          <section className="glass-panel p-4 sm:p-6">
+          <Card>
             <h3 className="font-medium text-sm mb-4">Branding</h3>
             <form onSubmit={handleSaveBranding} className="flex flex-wrap items-center gap-4 sm:gap-6">
               <button
                 type="button"
                 onClick={() => fileInputRef.current?.click()}
                 disabled={uploadingLogo}
+                aria-label="Change app logo"
                 className="relative h-16 w-16 rounded-xl overflow-hidden glass-panel glow-border group shrink-0"
               >
                 {logoUrl ? (
                   <img src={logoUrl} alt="App logo" className="h-full w-full object-cover" />
                 ) : (
-                  <div className="h-full w-full flex items-center justify-center text-xs text-gray-500">No logo</div>
+                  <div className="h-full w-full flex items-center justify-center text-xs text-muted">No logo</div>
                 )}
-                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
+                <div className="absolute inset-0 bg-black/50 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity duration-150">
                   <Upload size={16} className="text-cyan" />
                 </div>
               </button>
-              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoChange} />
+              <input ref={fileInputRef} type="file" accept="image/*" className="hidden" onChange={handleLogoChange} aria-label="Upload app logo" />
 
-              <div className="flex-1 min-w-[160px] space-y-1.5">
-                <label className="text-xs uppercase tracking-wide text-gray-400">App name</label>
-                <input className="input-field w-full max-w-xs" value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
+              <div className="flex-1 min-w-[160px]">
+                <Input label="App name" className="max-w-xs" value={nameDraft} onChange={(e) => setNameDraft(e.target.value)} />
               </div>
 
               <div className="flex items-center gap-3 shrink-0">
-                <button type="submit" disabled={savingBranding} className="btn-primary text-sm">
-                  {savingBranding ? 'Saving…' : 'Save'}
-                </button>
+                <Button type="submit" loading={savingBranding}>{savingBranding ? 'Saving…' : 'Save'}</Button>
                 {brandingSaved && <span className="text-xs text-cyan">Saved</span>}
               </div>
             </form>
             {uploadingLogo && <p className="text-xs text-violet mt-2">Uploading logo…</p>}
-          </section>
+          </Card>
         </div>
       )}
 
       {tab === 'security' && (
-        <section className="glass-panel p-4 sm:p-6">
+        <Card>
           <h3 className="font-medium text-sm mb-1">IP allowlist</h3>
-          <p className="text-xs text-gray-500 mb-4">
+          <p className="text-xs text-secondary mb-4">
             Opt-in: while this list is empty, access is unrestricted. Add at least one IP to start enforcing — enforced by the Vercel Edge Middleware at <code className="text-gray-400">middleware.ts</code>, not just this table.
           </p>
-          <form onSubmit={handleAddIp} className="flex flex-col sm:flex-row gap-2 mb-4">
-            <input required className="input-field flex-1 min-w-0" placeholder="203.0.113.42" value={newIp} onChange={(e) => setNewIp(e.target.value)} />
-            <input className="input-field flex-1 min-w-0" placeholder="Note (optional)" value={newIpNote} onChange={(e) => setNewIpNote(e.target.value)} />
-            <button type="submit" className="btn-primary text-sm px-3 flex items-center justify-center gap-1 shrink-0"><Plus size={14} /> Add</button>
+          <form onSubmit={handleAddIp} className="flex flex-col sm:flex-row gap-2 mb-4 sm:items-end">
+            <div className="flex-1 min-w-0">
+              <Input required placeholder="203.0.113.42" value={newIp} onChange={(e) => setNewIp(e.target.value)} aria-label="IP address" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <Input placeholder="Note (optional)" value={newIpNote} onChange={(e) => setNewIpNote(e.target.value)} aria-label="Note" />
+            </div>
+            <Button type="submit" className="shrink-0"><Plus size={14} /> Add</Button>
           </form>
           <div className="divide-y divide-white/5">
-            {allowlist.length === 0 && <p className="text-xs text-gray-500">No entries — access is currently unrestricted.</p>}
+            {allowlist.length === 0 && <p className="text-xs text-secondary">No entries — access is currently unrestricted.</p>}
             {allowlist.map((entry) => (
-              <div key={entry.id} className="flex items-center justify-between py-2 text-sm">
-                <div>
-                  <p className="font-mono">{entry.ip}</p>
-                  {entry.note && <p className="text-xs text-gray-500">{entry.note}</p>}
+              <div key={entry.id} className="flex items-center justify-between gap-3 py-2 text-sm">
+                <div className="min-w-0">
+                  <p className="font-mono truncate">{entry.ip}</p>
+                  {entry.note && <p className="text-xs text-secondary truncate">{entry.note}</p>}
                 </div>
-                <button onClick={() => handleRemoveIp(entry.id)} className="text-gray-500 hover:text-magenta"><Trash2 size={14} /></button>
+                <Button
+                  variant="tertiary"
+                  className="hover:text-danger shrink-0"
+                  onClick={() => handleRemoveIp(entry.id)}
+                  aria-label={`Remove ${entry.ip} from allowlist`}
+                >
+                  <Trash2 size={14} />
+                </Button>
               </div>
             ))}
           </div>
-        </section>
+        </Card>
       )}
 
       {tab === 'team' && (
         <div className="space-y-4 sm:space-y-6">
-          <section className="glass-panel">
+          <Card noPadding>
             <h3 className="px-5 py-3 border-b border-white/10 font-medium text-sm">Team members</h3>
             <div className="divide-y divide-white/5">
               {members.filter((m) => m.approved_at && m.is_active).map((m) => (
-                <div key={m.id} className="flex items-center justify-between px-5 py-3">
+                <div key={m.id} className="flex items-center justify-between gap-3 px-5 py-3">
                   <div className="min-w-0">
                     <p className="text-sm truncate">{m.full_name ?? m.email}</p>
-                    <p className="text-xs text-gray-500 truncate">{m.email}</p>
+                    <p className="text-xs text-secondary truncate">{m.email}</p>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
-                    <select
+                    <Select
+                      aria-label={`Role for ${m.full_name ?? m.email}`}
                       value={m.role}
-                      onChange={(e) => handleRoleChange(m.id, e.target.value as 'owner' | 'admin' | 'member')}
+                      onChange={(e) => onRoleSelectChange(m, e.target.value as 'owner' | 'admin' | 'member')}
                       disabled={m.role === 'owner'}
-                      className="input-field text-xs py-1"
+                      className="text-xs py-1"
                     >
                       <option value="member">Member</option>
                       <option value="admin">Admin</option>
@@ -428,28 +470,29 @@ export default function AdminPanel() {
                          (transferOwnership requires the target to already be 'admin'), and it always
                          shows as the target's own current role so an owner row still renders correctly. */}
                       {(m.role === 'owner' || (profile?.role === 'owner' && m.role === 'admin')) && <option value="owner">Owner</option>}
-                    </select>
+                    </Select>
                     {m.id !== profile?.id && m.role !== 'owner' && (
-                      <button
-                        onClick={() => handleRemoveMember(m)}
-                        className="p-1.5 rounded-lg text-gray-500 hover:text-magenta hover:bg-white/5"
-                        title="Remove member"
+                      <Button
+                        variant="tertiary"
+                        className="hover:text-danger"
+                        onClick={() => setRemoveTarget(m)}
+                        aria-label={`Remove ${m.full_name ?? m.email}`}
                       >
                         <Trash2 size={14} />
-                      </button>
+                      </Button>
                     )}
                   </div>
                 </div>
               ))}
             </div>
-          </section>
+          </Card>
 
           {privateProjects.length > 0 && (
-            <section className="glass-panel">
+            <Card noPadding>
               <h3 className="px-5 py-3 border-b border-white/10 font-medium text-sm flex items-center gap-2">
                 <Lock size={14} className="text-magenta" /> Private projects
               </h3>
-              <p className="px-5 pt-3 text-xs text-gray-600">
+              <p className="px-5 pt-3 text-xs text-muted">
                 {profile?.role === 'owner'
                   ? "As owner you can see every private project across the team."
                   : 'You can see private projects you created or were given access to.'}
@@ -464,11 +507,11 @@ export default function AdminPanel() {
                     <div key={p.id} className="px-5 py-3">
                       <div className="flex items-center justify-between gap-3">
                         <p className="text-sm truncate">{p.name}</p>
-                        <span className="text-xs text-gray-500 shrink-0">
+                        <span className="text-xs text-secondary shrink-0">
                           created by {creator?.full_name ?? creator?.email ?? 'Unknown'}
                         </span>
                       </div>
-                      <p className="text-xs text-gray-600 mt-1">
+                      <p className="text-xs text-muted mt-1">
                         {accessList.length === 0
                           ? 'No one else has been granted access.'
                           : `Access: ${accessList.map((m) => m.full_name ?? m.email).join(', ')}`}
@@ -477,90 +520,94 @@ export default function AdminPanel() {
                   )
                 })}
               </div>
-            </section>
+            </Card>
           )}
 
           {removedCount > 0 && (
-            <section className="glass-panel">
-              <h3 className="px-5 py-3 border-b border-white/10 font-medium text-sm">
+            <Card noPadding>
+              <h3 className="px-5 py-3 border-b border-white/10 font-medium text-sm flex items-center gap-2">
                 Removed members
-                <span className="ml-2 text-xs font-normal text-gray-500">{removedCount}</span>
+                <Badge variant="default">{removedCount}</Badge>
               </h3>
-              <p className="px-5 pt-3 text-xs text-gray-600">Hidden from the active team list, still shown as author on their past work. Restore their access, or delete them permanently.</p>
+              <p className="px-5 pt-3 text-xs text-muted">Hidden from the active team list, still shown as author on their past work. Restore their access, or delete them permanently.</p>
               <div className="divide-y divide-white/5 mt-1">
                 {members
                   .filter((m) => m.approved_at && !m.is_active && !m.deleted_at)
                   .map((m) => (
-                    <div key={m.id} className="flex items-center justify-between px-5 py-3">
+                    <div key={m.id} className="flex items-center justify-between gap-3 px-5 py-3">
                       <div className="min-w-0">
                         <p className="text-sm text-gray-400 truncate">{m.full_name ?? m.email}</p>
-                        <p className="text-xs text-gray-600 truncate">{m.email}</p>
+                        <p className="text-xs text-muted truncate">{m.email}</p>
                       </div>
                       <div className="flex items-center gap-1.5 shrink-0">
-                        <button
-                          onClick={() => handleRestoreMember(m)}
-                          disabled={memberActionId === m.id}
-                          className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-xs text-gray-400 border border-white/10 hover:text-cyan hover:border-cyan/30 hover:bg-white/5 disabled:opacity-40"
-                          title="Restore access"
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => setRestoreTarget(m)}
+                          loading={memberActionId === m.id}
+                          aria-label={`Restore ${m.full_name ?? m.email}`}
                         >
-                          <RotateCcw size={13} />
-                          Restore
-                        </button>
-                        <button
-                          onClick={() => handleDeleteMemberPermanently(m)}
+                          <RotateCcw size={13} /> Restore
+                        </Button>
+                        <Button
+                          variant="tertiary"
+                          className="hover:text-danger"
+                          onClick={() => setDeleteTarget(m)}
                           disabled={memberActionId === m.id}
-                          className="p-2 rounded-lg text-gray-500 hover:text-red-400 hover:bg-white/5 disabled:opacity-40"
-                          title="Delete permanently"
+                          aria-label={`Delete ${m.full_name ?? m.email} permanently`}
                         >
                           <Trash2 size={14} />
-                        </button>
+                        </Button>
                       </div>
                     </div>
                   ))}
               </div>
-            </section>
+            </Card>
           )}
         </div>
       )}
 
       {tab === 'activity' && (
-        <section className="glass-panel">
+        <Card noPadding>
           <h3 className="px-5 py-3 border-b border-white/10 font-medium text-sm">
             Activity — who did what, when, and who logged in
           </h3>
 
-          <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-white/10 text-xs">
-            <select
+          <div className="flex flex-wrap items-center gap-2 px-5 py-3 border-b border-white/10">
+            <Select
+              aria-label="Filter by person"
               value={activityPersonFilter}
               onChange={(e) => setActivityPersonFilter(e.target.value)}
-              className="input-field py-1 text-xs w-auto"
+              className="py-1 text-xs w-auto"
             >
               <option value="all">Everyone</option>
               {members.map((m) => (
                 <option key={m.id} value={m.id}>Only: {m.full_name ?? m.email}</option>
               ))}
-            </select>
-            <select
+            </Select>
+            <Select
+              aria-label="Filter by action"
               value={activityActionFilter}
               onChange={(e) => setActivityActionFilter(e.target.value)}
-              className="input-field py-1 text-xs w-auto"
+              className="py-1 text-xs w-auto"
             >
               <option value="all">All actions</option>
               {activityActionOptions.map((a) => (
                 <option key={a} value={a}>{a}</option>
               ))}
-            </select>
+            </Select>
           </div>
 
           {activityPersonFilter === 'all' && (
             <div className="flex flex-wrap items-center gap-1.5 px-5 py-2.5 border-b border-white/10 text-xs">
-              <span className="text-gray-500 shrink-0">Hide:</span>
+              <span className="text-muted shrink-0">Hide:</span>
               {members.map((m) => {
                 const hidden = activityExcludedIds.has(m.id)
                 return (
                   <button
                     key={m.id}
                     type="button"
+                    aria-pressed={hidden}
                     onClick={() =>
                       setActivityExcludedIds((prev) => {
                         const next = new Set(prev)
@@ -569,8 +616,8 @@ export default function AdminPanel() {
                         return next
                       })
                     }
-                    className={`px-2 py-0.5 rounded-full border transition-colors ${
-                      hidden ? 'border-magenta/40 text-magenta bg-magenta/10' : 'border-white/10 text-gray-500 hover:text-gray-300'
+                    className={`px-2 py-0.5 rounded-full border transition-colors duration-150 ${
+                      hidden ? 'border-danger/40 text-danger bg-danger/10' : 'border-white/10 text-secondary hover:text-gray-300'
                     }`}
                   >
                     {m.full_name ?? m.email}
@@ -581,31 +628,85 @@ export default function AdminPanel() {
           )}
 
           <div className="divide-y divide-white/5 max-h-[70vh] overflow-y-auto">
-            {filteredTimeline.length === 0 && <p className="px-5 py-4 text-sm text-gray-500">Nothing matches these filters.</p>}
+            {filteredTimeline.length === 0 && <p className="px-5 py-4 text-sm text-secondary">Nothing matches these filters.</p>}
             {filteredTimeline.map((t) => (
               <div key={t.id} className="px-5 py-2.5 text-sm flex items-center justify-between gap-3">
                 <div className="min-w-0 flex items-baseline gap-2">
                   <span className="text-gray-200 font-medium shrink-0">{t.actorLabel}</span>
-                  <span className="text-gray-400 shrink-0">
+                  <span className="text-secondary shrink-0">
                     {t.action}
                   </span>
-                  <span className="text-gray-500 truncate">{t.detail}</span>
+                  <span className="text-muted truncate">{t.detail}</span>
                 </div>
-                <span className="text-xs text-gray-500 shrink-0">{formatDistanceToNow(new Date(t.timestamp), { addSuffix: true })}</span>
+                <span className="text-xs text-muted shrink-0">{formatDistanceToNow(new Date(t.timestamp), { addSuffix: true })}</span>
               </div>
             ))}
           </div>
-        </section>
+        </Card>
       )}
+
+      <ConfirmDialog
+        open={Boolean(rejectTarget)}
+        onClose={() => setRejectTarget(null)}
+        onConfirm={confirmReject}
+        title={`Reject the signup from ${rejectTarget?.full_name ?? rejectTarget?.email}?`}
+        description="They won't be able to log in."
+        confirmLabel="Reject"
+        danger
+        loading={memberActionId === rejectTarget?.id}
+      />
+
+      <ConfirmDialog
+        open={Boolean(ownerTransferTarget)}
+        onClose={() => setOwnerTransferTarget(null)}
+        onConfirm={confirmOwnerTransfer}
+        title={`Make ${ownerTransferTarget?.full_name ?? ownerTransferTarget?.email} the owner?`}
+        description="You'll be demoted to admin — there can only be one owner."
+        confirmLabel="Transfer ownership"
+        danger
+        loading={transferLoading}
+      />
+
+      <ConfirmDialog
+        open={Boolean(removeTarget)}
+        onClose={() => setRemoveTarget(null)}
+        onConfirm={confirmRemoveMember}
+        title={`Remove ${removeTarget?.full_name ?? removeTarget?.email} from the team?`}
+        description="They won't be able to log in anymore, but their projects/files stay intact."
+        confirmLabel="Remove"
+        danger
+        loading={memberActionId === removeTarget?.id}
+      />
+
+      <ConfirmDialog
+        open={Boolean(restoreTarget)}
+        onClose={() => setRestoreTarget(null)}
+        onConfirm={confirmRestoreMember}
+        title={`Restore ${restoreTarget?.full_name ?? restoreTarget?.email}'s access?`}
+        description="They'll be able to log in again."
+        confirmLabel="Restore access"
+        loading={memberActionId === restoreTarget?.id}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={confirmDeletePermanently}
+        title={`Permanently delete ${deleteTarget?.full_name ?? deleteTarget?.email}?`}
+        description='This cannot be undone. If they never created anything, their account is deleted outright. If they authored projects/files/tasks, their row is kept as "Deleted member" only so past work stays attributed — but their email, name, and avatar are wiped.'
+        confirmLabel="Delete permanently"
+        danger
+        loading={memberActionId === deleteTarget?.id}
+      />
     </div>
   )
 }
 
 function StatCard({ label, value }: { label: string; value: number }) {
   return (
-    <div className="glass-panel p-4">
+    <Card>
       <p className="text-2xl font-bold neon-gradient-text">{value}</p>
-      <p className="text-xs text-gray-500 mt-1">{label}</p>
-    </div>
+      <p className="text-xs text-secondary mt-1">{label}</p>
+    </Card>
   )
 }
