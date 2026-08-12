@@ -4,7 +4,7 @@ import { listNotes, createNote, updateNote, deleteNote, listQuickTasks, createQu
 import { useAuthStore } from '../store/authStore'
 import { useDebouncedCallback } from '../lib/useDebouncedCallback'
 import { formatDistanceToNow } from 'date-fns'
-import { PageHeader, Card, Button, EmptyState, LoadingState } from '../components/ui'
+import { PageHeader, Card, Button, EmptyState, LoadingState, ConfirmDialog } from '../components/ui'
 
 export default function NotesAndTasks() {
   const user = useAuthStore((s) => s.user)
@@ -13,6 +13,8 @@ export default function NotesAndTasks() {
   const [activeNote, setActiveNote] = useState<Note | null>(null)
   const [newTaskTitle, setNewTaskTitle] = useState('')
   const [loading, setLoading] = useState(true)
+  const [deletingNote, setDeletingNote] = useState<Note | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   useEffect(() => {
     Promise.all([listNotes(), listQuickTasks()]).then(([n, t]) => {
@@ -41,11 +43,17 @@ export default function NotesAndTasks() {
     debouncedSave(updated.id, updated.title, updated.body)
   }
 
-  async function handleDeleteNote(id: string) {
-    if (!window.confirm('Delete this note?')) return
-    await deleteNote(id)
-    setNotes((prev) => prev.filter((n) => n.id !== id))
-    if (activeNote?.id === id) setActiveNote(null)
+  async function confirmDeleteNote() {
+    if (!deletingNote) return
+    setDeleteLoading(true)
+    try {
+      await deleteNote(deletingNote.id)
+      setNotes((prev) => prev.filter((n) => n.id !== deletingNote.id))
+      if (activeNote?.id === deletingNote.id) setActiveNote(null)
+      setDeletingNote(null)
+    } finally {
+      setDeleteLoading(false)
+    }
   }
 
   async function handleAddTask() {
@@ -91,7 +99,7 @@ export default function NotesAndTasks() {
                   value={activeNote.title}
                   onChange={(e) => handleNoteChange('title', e.target.value)}
                 />
-                <button onClick={() => handleDeleteNote(activeNote.id)} className="text-gray-500 hover:text-magenta shrink-0" title="Delete note">
+                <button onClick={() => setDeletingNote(activeNote)} className="text-gray-500 hover:text-danger shrink-0" title="Delete note" aria-label="Delete note">
                   <Trash2 size={14} />
                 </button>
               </div>
@@ -131,7 +139,7 @@ export default function NotesAndTasks() {
               <div key={t.id} className="flex items-center gap-3 px-4 py-2.5 group">
                 <input type="checkbox" checked={t.is_done} onChange={() => handleToggleTask(t)} className="accent-cyan h-4 w-4" aria-label={`Mark "${t.title}" as ${t.is_done ? 'not done' : 'done'}`} />
                 <span className={`flex-1 text-sm ${t.is_done ? 'line-through text-muted' : 'text-gray-200'}`}>{t.title}</span>
-                <button onClick={() => handleDeleteTask(t.id)} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-magenta transition-colors duration-150" aria-label={`Delete "${t.title}"`}>
+                <button onClick={() => handleDeleteTask(t.id)} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-danger transition-colors duration-150" aria-label={`Delete "${t.title}"`}>
                   <Trash2 size={13} />
                 </button>
               </div>
@@ -150,6 +158,16 @@ export default function NotesAndTasks() {
           </Card>
         </section>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(deletingNote)}
+        onClose={() => setDeletingNote(null)}
+        onConfirm={confirmDeleteNote}
+        title="Delete this note?"
+        confirmLabel="Delete"
+        danger
+        loading={deleteLoading}
+      />
     </div>
   )
 }
