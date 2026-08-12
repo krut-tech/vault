@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
+import { Button, Input } from '../components/ui'
 
 export default function ForgotPassword() {
   const [email, setEmail] = useState('')
@@ -28,21 +29,17 @@ export default function ForgotPassword() {
         <h1 className="text-2xl font-bold neon-gradient-text">Reset password</h1>
         <p className="text-sm text-gray-400">Enter your email and we'll send you a link to reset your password.</p>
 
-        <div className="space-y-2">
-          <label htmlFor="email" className="text-xs uppercase tracking-wide text-gray-400">Email</label>
-          <input
-            id="email"
-            type="email"
-            required
-            autoComplete="email"
-            className="input-field w-full"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            disabled={done}
-          />
-        </div>
+        <Input
+          label="Email"
+          type="email"
+          required
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          disabled={done}
+        />
 
-        {error && <p role="alert" className="text-sm text-magenta bg-magenta/10 border border-magenta/30 rounded-lg px-3 py-2">{error}</p>}
+        {error && <p role="alert" className="text-sm text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">{error}</p>}
         {done && (
           <p role="status" className="text-sm text-cyan bg-cyan/10 border border-cyan/30 rounded-lg px-3 py-2">
             If an account exists for that email, a reset link has been sent. Check your inbox.
@@ -50,9 +47,9 @@ export default function ForgotPassword() {
         )}
 
         {!done && (
-          <button type="submit" disabled={submitting} className="btn-primary w-full">
+          <Button type="submit" loading={submitting} className="w-full">
             {submitting ? 'Sending…' : 'Send reset link'}
-          </button>
+          </Button>
         )}
 
         <p className="text-sm text-gray-400 text-center">
