@@ -18,7 +18,7 @@ import { useAuthStore } from '../store/authStore'
 import { useWorkspaceStore } from '../store/workspaceStore'
 import { useToastStore } from '../store/toastStore'
 import { supabase } from '../lib/supabase'
-import { Badge, Button, LoadingState } from '../components/ui'
+import { Badge, Button, ConfirmDialog, LoadingState } from '../components/ui'
 
 const MIN_SIDEBAR = 190
 const MAX_SIDEBAR = 480
@@ -43,6 +43,10 @@ export default function ProjectView() {
   const [showComments, setShowComments] = useState(false)
   const [showDeploy, setShowDeploy] = useState(false)
   const [showScanner, setShowScanner] = useState(false)
+  const [deletingFolder, setDeletingFolder] = useState<Folder | null>(null)
+  const [deletingPdf, setDeletingPdf] = useState<PdfFile | null>(null)
+  const [confirmDeleteFile, setConfirmDeleteFile] = useState(false)
+  const [deleteBusy, setDeleteBusy] = useState(false)
   const [pdfs, setPdfs] = useState<PdfFile[]>([])
   const [loading, setLoading] = useState(true)
   const [zipping, setZipping] = useState(false)
@@ -210,14 +214,20 @@ export default function ProjectView() {
     setFolders((prev) => prev.map((f) => (f.id === folder.id ? { ...f, parent_id: targetFolderId } : f)))
   }
 
-  async function handleDeleteFolderFromTree(folder: Folder) {
-    if (!window.confirm(`Move "${folder.name}" and everything inside it to the recycle bin?`)) return
-    const { folderIds, fileIds } = await softDeleteFolderCascade(folder.id, folders, files)
-    setFolders((prev) => prev.filter((f) => !folderIds.includes(f.id)))
-    setFiles((prev) => prev.filter((f) => !fileIds.includes(f.id)))
-    setOpenFiles((prev) => prev.filter((f) => !fileIds.includes(f.id)))
-    if (activeFileId && fileIds.includes(activeFileId)) setActiveFileId(null)
-    pushToast(`Moved "${folder.name}" (${fileIds.length} file(s)) to recycle bin`, { link: '/recycle-bin', type: 'success' })
+  async function confirmDeleteFolder() {
+    if (!deletingFolder) return
+    setDeleteBusy(true)
+    try {
+      const { folderIds, fileIds } = await softDeleteFolderCascade(deletingFolder.id, folders, files)
+      setFolders((prev) => prev.filter((f) => !folderIds.includes(f.id)))
+      setFiles((prev) => prev.filter((f) => !fileIds.includes(f.id)))
+      setOpenFiles((prev) => prev.filter((f) => !fileIds.includes(f.id)))
+      if (activeFileId && fileIds.includes(activeFileId)) setActiveFileId(null)
+      pushToast(`Moved "${deletingFolder.name}" (${fileIds.length} file(s)) to recycle bin`, { link: '/recycle-bin', type: 'success' })
+      setDeletingFolder(null)
+    } finally {
+      setDeleteBusy(false)
+    }
   }
 
   // --- Upload: individual files into a given folder (or root) ---
@@ -462,11 +472,17 @@ export default function ProjectView() {
     window.open(getPdfUrl(pdf.storage_path), '_blank')
   }
 
-  async function handleDeletePdf(pdf: PdfFile) {
-    if (!window.confirm(`Delete "${pdf.name}"?`)) return
-    await deletePdf(pdf)
-    setPdfs((prev) => prev.filter((p) => p.id !== pdf.id))
-    if (user) void logActivity(user.id, 'deleted', 'pdf', pdf.id, { name: pdf.name, project_id: id })
+  async function confirmDeletePdf() {
+    if (!deletingPdf) return
+    setDeleteBusy(true)
+    try {
+      await deletePdf(deletingPdf)
+      setPdfs((prev) => prev.filter((p) => p.id !== deletingPdf.id))
+      if (user) void logActivity(user.id, 'deleted', 'pdf', deletingPdf.id, { name: deletingPdf.name, project_id: id })
+      setDeletingPdf(null)
+    } finally {
+      setDeleteBusy(false)
+    }
   }
 
   function folderPath(folderId: string | null): string {
@@ -510,13 +526,23 @@ export default function ProjectView() {
     setFiles((prev) => prev.map((f) => (f.id === activeFile.id ? { ...f, is_favorite: next } : f)))
   }
 
-  async function handleDeleteFile() {
+  function handleDeleteFile() {
     if (!activeFile) return
-    if (!window.confirm(`Move "${activeFile.name}" to recycle bin?`)) return
-    await softDeleteFile(activeFile.id)
-    setFiles((prev) => prev.filter((f) => f.id !== activeFile.id))
-    if (user) void logActivity(user.id, 'deleted', 'file', activeFile.id, { name: activeFile.name })
-    closeTab(activeFile.id)
+    setConfirmDeleteFile(true)
+  }
+
+  async function confirmDeleteFileAction() {
+    if (!activeFile) return
+    setDeleteBusy(true)
+    try {
+      await softDeleteFile(activeFile.id)
+      setFiles((prev) => prev.filter((f) => f.id !== activeFile.id))
+      if (user) void logActivity(user.id, 'deleted', 'file', activeFile.id, { name: activeFile.name })
+      closeTab(activeFile.id)
+      setConfirmDeleteFile(false)
+    } finally {
+      setDeleteBusy(false)
+    }
   }
 
   async function handleRestoredVersion() {
@@ -694,13 +720,13 @@ export default function ProjectView() {
               onUploadPdf={handleUploadPdf}
               onDownloadFile={handleDownloadFile}
               onDownloadPdf={handleDownloadPdf}
-              onDeletePdf={handleDeletePdf}
+              onDeletePdf={setDeletingPdf}
               onRenameFile={handleRenameFile}
               onRenameFolder={handleRenameFolder}
               onDuplicateFile={handleDuplicateFile}
               onMoveFile={handleMoveFile}
               onMoveFolder={handleMoveFolder}
-              onDeleteFolder={handleDeleteFolderFromTree}
+              onDeleteFolder={setDeletingFolder}
             />
           </div>
         )}
@@ -798,6 +824,37 @@ export default function ProjectView() {
       {showDeploy && id && <DeployPanel projectId={id} onClose={() => setShowDeploy(false)} />}
 
       {showScanner && id && <CodeScanner projectId={id} onClose={() => setShowScanner(false)} />}
+
+      <ConfirmDialog
+        open={Boolean(deletingFolder)}
+        onClose={() => setDeletingFolder(null)}
+        onConfirm={confirmDeleteFolder}
+        title={`Move "${deletingFolder?.name}" to recycle bin?`}
+        description="Everything inside it moves too. You can restore it later."
+        confirmLabel="Move to recycle bin"
+        danger
+        loading={deleteBusy}
+      />
+
+      <ConfirmDialog
+        open={Boolean(deletingPdf)}
+        onClose={() => setDeletingPdf(null)}
+        onConfirm={confirmDeletePdf}
+        title={`Delete "${deletingPdf?.name}"?`}
+        confirmLabel="Delete"
+        danger
+        loading={deleteBusy}
+      />
+
+      <ConfirmDialog
+        open={confirmDeleteFile}
+        onClose={() => setConfirmDeleteFile(false)}
+        onConfirm={confirmDeleteFileAction}
+        title={`Move "${activeFile?.name}" to recycle bin?`}
+        confirmLabel="Move to recycle bin"
+        danger
+        loading={deleteBusy}
+      />
     </div>
   )
 }
