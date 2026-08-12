@@ -3,7 +3,7 @@ import { Plus, Activity, Trash2, RefreshCw } from 'lucide-react'
 import { listMonitors, createMonitor, deleteMonitor, listChecks, runManualCheck, uptimePercentage, type Monitor, type MonitorCheck } from '../lib/api/monitoring'
 import { useAuthStore } from '../store/authStore'
 import { formatDistanceToNow } from 'date-fns'
-import { PageHeader, Card, Button, Badge, EmptyState, LoadingState, Modal, Input } from '../components/ui'
+import { PageHeader, Card, Button, Badge, EmptyState, LoadingState, Modal, Input, ConfirmDialog } from '../components/ui'
 
 // Real data only — is_up is the only signal the DB actually stores, so
 // "warning" is derived from a genuinely-captured field (response_ms),
@@ -45,6 +45,8 @@ export default function Monitors() {
   const [checking, setChecking] = useState(false)
   const [checkError, setCheckError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const [deletingMonitor, setDeletingMonitor] = useState<Monitor | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   async function refresh() {
     setLoading(true)
@@ -70,10 +72,16 @@ export default function Monitors() {
     }
   }
 
-  async function handleDelete(id: string) {
-    if (!window.confirm('Remove this monitor?')) return
-    await deleteMonitor(id)
-    setMonitors((prev) => prev.filter((m) => m.id !== id))
+  async function confirmDeleteMonitor() {
+    if (!deletingMonitor) return
+    setDeleteLoading(true)
+    try {
+      await deleteMonitor(deletingMonitor.id)
+      setMonitors((prev) => prev.filter((m) => m.id !== deletingMonitor.id))
+      setDeletingMonitor(null)
+    } finally {
+      setDeleteLoading(false)
+    }
   }
 
   if (loading) return <div className="p-6"><LoadingState fullHeight label="Loading monitors…" /></div>
@@ -139,7 +147,7 @@ export default function Monitors() {
                         checked {formatDistanceToNow(new Date(latest.checked_at), { addSuffix: true })}
                       </span>
                     )}
-                    <button onClick={() => handleDelete(m.id)} className="text-gray-500 hover:text-danger" title="Remove monitor">
+                    <button onClick={() => setDeletingMonitor(m)} className="text-gray-500 hover:text-danger" title="Remove monitor" aria-label={`Remove ${m.name}`}>
                       <Trash2 size={14} />
                     </button>
                   </div>
@@ -163,6 +171,17 @@ export default function Monitors() {
       {showForm && user && (
         <MonitorForm userId={user.id} onCreated={() => { setShowForm(false); refresh() }} onCancel={() => setShowForm(false)} />
       )}
+
+      <ConfirmDialog
+        open={Boolean(deletingMonitor)}
+        onClose={() => setDeletingMonitor(null)}
+        onConfirm={confirmDeleteMonitor}
+        title={`Remove "${deletingMonitor?.name}"?`}
+        description="This stops tracking uptime for this URL. Past check history is also removed."
+        confirmLabel="Remove monitor"
+        danger
+        loading={deleteLoading}
+      />
     </div>
   )
 }
