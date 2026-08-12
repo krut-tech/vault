@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2, StickyNote, ListChecks } from 'lucide-react'
+import { Plus, Trash2, StickyNote, ListChecks } from 'lucide-react'
 import { listNotes, createNote, updateNote, deleteNote, listQuickTasks, createQuickTask, toggleQuickTask, deleteQuickTask, type Note, type QuickTask } from '../lib/api/notes'
 import { useAuthStore } from '../store/authStore'
 import { useDebouncedCallback } from '../lib/useDebouncedCallback'
 import { formatDistanceToNow } from 'date-fns'
+import { PageHeader, Card, Button, EmptyState, LoadingState } from '../components/ui'
 
 export default function NotesAndTasks() {
   const user = useAuthStore((s) => s.user)
@@ -66,31 +66,34 @@ export default function NotesAndTasks() {
     setTasks((prev) => prev.filter((t) => t.id !== id))
   }
 
-  if (loading) return <div className="p-6 text-gray-400 text-sm">Loading…</div>
+  if (loading) return <div className="p-6"><LoadingState fullHeight label="Loading your notes…" /></div>
+
+  const doneCount = tasks.filter((t) => t.is_done).length
 
   return (
     <div className="p-6 max-w-5xl mx-auto space-y-6">
-      <div className="flex items-center gap-3">
-        <Link to="/" className="text-gray-400 hover:text-cyan"><ArrowLeft size={18} /></Link>
-        <h2 className="text-lg font-semibold">Notes &amp; Quick Tasks</h2>
-      </div>
+      <PageHeader title="Notes & Quick Tasks" backTo="/" />
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <section>
           <div className="flex items-center justify-between mb-3">
             <h3 className="text-sm font-medium flex items-center gap-1.5 text-gray-300"><StickyNote size={15} /> Notes</h3>
-            <button onClick={handleCreateNote} className="text-xs text-cyan hover:underline flex items-center gap-1"><Plus size={13} /> New note</button>
+            <Button variant="tertiary" size="sm" onClick={handleCreateNote}>
+              <Plus size={13} /> New note
+            </Button>
           </div>
 
           {activeNote ? (
-            <div className="glass-panel p-4 space-y-2">
-              <div className="flex items-center justify-between">
+            <Card className="space-y-3">
+              <div className="flex items-center justify-between gap-2">
                 <input
                   className="input-field flex-1 font-medium"
                   value={activeNote.title}
                   onChange={(e) => handleNoteChange('title', e.target.value)}
                 />
-                <button onClick={() => handleDeleteNote(activeNote.id)} className="ml-2 text-gray-500 hover:text-magenta"><Trash2 size={14} /></button>
+                <button onClick={() => handleDeleteNote(activeNote.id)} className="text-gray-500 hover:text-magenta shrink-0" title="Delete note">
+                  <Trash2 size={14} />
+                </button>
               </div>
               <textarea
                 className="input-field w-full min-h-[240px] resize-y"
@@ -98,16 +101,19 @@ export default function NotesAndTasks() {
                 value={activeNote.body}
                 onChange={(e) => handleNoteChange('body', e.target.value)}
               />
-              <button onClick={() => setActiveNote(null)} className="text-xs text-gray-500 hover:text-cyan">← Back to notes</button>
-            </div>
+              <button onClick={() => setActiveNote(null)} className="text-xs text-gray-500 hover:text-cyan transition-colors duration-150">← Back to notes</button>
+            </Card>
+          ) : notes.length === 0 ? (
+            <EmptyState icon={StickyNote} title="No notes yet" description="Jot something down whenever you need to." />
           ) : (
             <div className="space-y-2">
-              {notes.length === 0 && <div className="glass-panel p-6 text-center text-gray-500 text-sm">No notes yet.</div>}
               {notes.map((n) => (
-                <button key={n.id} onClick={() => setActiveNote(n)} className="glass-panel w-full text-left p-3 hover:glow-border transition-shadow block">
-                  <p className="text-sm font-medium truncate">{n.title}</p>
-                  <p className="text-xs text-gray-500 truncate mt-0.5">{n.body || 'Empty note'}</p>
-                  <p className="text-[10px] text-gray-600 mt-1">Updated {formatDistanceToNow(new Date(n.updated_at), { addSuffix: true })}</p>
+                <button key={n.id} onClick={() => setActiveNote(n)} className="w-full text-left block">
+                  <Card hover noPadding className="p-3">
+                    <p className="text-sm font-medium truncate">{n.title}</p>
+                    <p className="text-xs text-secondary truncate mt-0.5">{n.body || 'Empty note'}</p>
+                    <p className="text-[10px] text-muted mt-1">Updated {formatDistanceToNow(new Date(n.updated_at), { addSuffix: true })}</p>
+                  </Card>
                 </button>
               ))}
             </div>
@@ -115,14 +121,19 @@ export default function NotesAndTasks() {
         </section>
 
         <section>
-          <h3 className="text-sm font-medium flex items-center gap-1.5 text-gray-300 mb-3"><ListChecks size={15} /> Quick tasks</h3>
-          <div className="glass-panel divide-y divide-white/5">
-            {tasks.length === 0 && <p className="p-4 text-sm text-gray-500">No tasks yet.</p>}
+          <div className="flex items-center justify-between mb-3">
+            <h3 className="text-sm font-medium flex items-center gap-1.5 text-gray-300"><ListChecks size={15} /> Quick tasks</h3>
+            {tasks.length > 0 && <span className="text-xs text-muted">{doneCount}/{tasks.length} done</span>}
+          </div>
+          <Card noPadding className="divide-y divide-white/5">
+            {tasks.length === 0 && <p className="p-4 text-sm text-secondary">No tasks yet.</p>}
             {tasks.map((t) => (
               <div key={t.id} className="flex items-center gap-3 px-4 py-2.5 group">
-                <input type="checkbox" checked={t.is_done} onChange={() => handleToggleTask(t)} className="accent-cyan h-4 w-4" />
-                <span className={`flex-1 text-sm ${t.is_done ? 'line-through text-gray-500' : 'text-gray-200'}`}>{t.title}</span>
-                <button onClick={() => handleDeleteTask(t.id)} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-magenta"><Trash2 size={13} /></button>
+                <input type="checkbox" checked={t.is_done} onChange={() => handleToggleTask(t)} className="accent-cyan h-4 w-4" aria-label={`Mark "${t.title}" as ${t.is_done ? 'not done' : 'done'}`} />
+                <span className={`flex-1 text-sm ${t.is_done ? 'line-through text-muted' : 'text-gray-200'}`}>{t.title}</span>
+                <button onClick={() => handleDeleteTask(t.id)} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-magenta transition-colors duration-150" aria-label={`Delete "${t.title}"`}>
+                  <Trash2 size={13} />
+                </button>
               </div>
             ))}
             <div className="flex gap-2 p-3">
@@ -132,10 +143,11 @@ export default function NotesAndTasks() {
                 value={newTaskTitle}
                 onChange={(e) => setNewTaskTitle(e.target.value)}
                 onKeyDown={(e) => e.key === 'Enter' && handleAddTask()}
+                aria-label="New task title"
               />
-              <button onClick={handleAddTask} className="text-cyan hover:text-cyan/80 text-xs px-2">Add</button>
+              <button onClick={handleAddTask} className="text-cyan hover:text-cyan/80 text-xs px-2 transition-colors duration-150">Add</button>
             </div>
-          </div>
+          </Card>
         </section>
       </div>
     </div>

@@ -1,8 +1,10 @@
 import { useEffect, useState, type FormEvent } from 'react'
 import { Link } from 'react-router-dom'
-import { ArrowLeft, Plus, Kanban as KanbanIcon } from 'lucide-react'
+import { Plus, Kanban as KanbanIcon } from 'lucide-react'
 import { listBoards, createBoard, type Board } from '../lib/api/kanban'
 import { useAuthStore } from '../store/authStore'
+import { formatDistanceToNow } from 'date-fns'
+import { PageHeader, Card, Button, EmptyState, LoadingState, Modal, Input } from '../components/ui'
 
 export default function BoardsList() {
   const [boards, setBoards] = useState<Board[]>([])
@@ -21,33 +23,50 @@ export default function BoardsList() {
 
   useEffect(() => { refresh() }, [])
 
-  return (
-    <div className="p-6 max-w-5xl mx-auto">
-      <div className="flex items-center justify-between mb-6">
-        <div className="flex items-center gap-3">
-          <Link to="/" className="text-gray-400 hover:text-cyan"><ArrowLeft size={18} /></Link>
-          <h2 className="text-lg font-semibold">Kanban boards</h2>
-        </div>
-        <button onClick={() => setShowModal(true)} className="btn-primary flex items-center gap-1.5 text-sm">
-          <Plus size={16} /> New board
-        </button>
-      </div>
+  if (loading) return <div className="p-6"><LoadingState fullHeight label="Loading boards…" /></div>
 
-      {loading && <p className="text-sm text-gray-500">Loading…</p>}
-      {!loading && boards.length === 0 && (
-        <div className="glass-panel p-10 text-center text-gray-500">
-          <KanbanIcon className="mx-auto mb-3 text-cyan/50" size={32} />
-          No boards yet. Create one to start tracking tasks.
+  return (
+    <div className="p-6 max-w-5xl mx-auto space-y-6">
+      <PageHeader
+        title="Kanban boards"
+        backTo="/"
+        actions={
+          <Button variant="primary" size="sm" onClick={() => setShowModal(true)}>
+            <Plus size={16} /> New board
+          </Button>
+        }
+      />
+
+      {boards.length === 0 ? (
+        <EmptyState
+          icon={KanbanIcon}
+          title="No boards yet"
+          description="Create one to start tracking tasks."
+          action={
+            <Button variant="primary" size="sm" onClick={() => setShowModal(true)}>
+              <Plus size={14} /> New board
+            </Button>
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          {boards.map((b) => (
+            <Link key={b.id} to={`/boards/${b.id}`} className="block">
+              <Card hover className="h-full">
+                <div className="flex items-center gap-2.5">
+                  <span className="h-8 w-8 rounded-lg bg-cyan/10 flex items-center justify-center shrink-0">
+                    <KanbanIcon size={15} className="text-cyan" />
+                  </span>
+                  <h3 className="font-medium truncate">{b.name}</h3>
+                </div>
+                <p className="text-xs text-secondary mt-3">
+                  Created {formatDistanceToNow(new Date(b.created_at), { addSuffix: true })}
+                </p>
+              </Card>
+            </Link>
+          ))}
         </div>
       )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {boards.map((b) => (
-          <Link key={b.id} to={`/boards/${b.id}`} className="glass-panel p-5 hover:glow-border transition-shadow block">
-            <h3 className="font-medium">{b.name}</h3>
-          </Link>
-        ))}
-      </div>
 
       {showModal && user && (
         <CreateBoardModal userId={user.id} onClose={() => setShowModal(false)} onCreated={() => { setShowModal(false); refresh() }} />
@@ -72,15 +91,21 @@ function CreateBoardModal({ userId, onClose, onCreated }: { userId: string; onCl
   }
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
-      <form onSubmit={handleSubmit} className="glass-panel glow-border w-full max-w-sm p-6 space-y-4">
-        <h3 className="font-semibold">New board</h3>
-        <input required autoFocus className="input-field w-full" placeholder="Board name" value={name} onChange={(e) => setName(e.target.value)} />
-        <div className="flex justify-end gap-2">
-          <button type="button" onClick={onClose} className="px-4 py-2 text-sm rounded-xl border border-white/10 hover:border-white/30">Cancel</button>
-          <button type="submit" disabled={submitting} className="btn-primary text-sm">{submitting ? 'Creating…' : 'Create'}</button>
-        </div>
+    <Modal
+      open
+      onClose={onClose}
+      title="New board"
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" size="sm" onClick={onClose} disabled={submitting}>Cancel</Button>
+          <Button variant="primary" size="sm" type="submit" form="board-form" loading={submitting}>Create</Button>
+        </>
+      }
+    >
+      <form id="board-form" onSubmit={handleSubmit}>
+        <Input required autoFocus label="Board name" placeholder="e.g. Sprint 12" value={name} onChange={(e) => setName(e.target.value)} />
       </form>
-    </div>
+    </Modal>
   )
 }

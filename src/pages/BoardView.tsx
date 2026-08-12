@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useParams, Link } from 'react-router-dom'
-import { ArrowLeft, Plus, Trash2 } from 'lucide-react'
+import { useParams } from 'react-router-dom'
+import { Plus, Trash2, GripVertical } from 'lucide-react'
 import {
   DndContext, DragOverlay, PointerSensor, useSensor, useSensors,
   useDraggable, useDroppable, type DragEndEvent, type DragStartEvent,
 } from '@dnd-kit/core'
 import { getBoard, listColumns, listTasksForBoard, createColumn, createTask, moveTask, deleteTask, type Board, type BoardColumn, type Task } from '../lib/api/kanban'
 import { supabase } from '../lib/supabase'
+import { PageHeader, Button, LoadingState, EmptyState } from '../components/ui'
+import { Kanban as KanbanIcon } from 'lucide-react'
 
 export default function BoardView() {
   const { id } = useParams<{ id: string }>()
@@ -90,23 +92,25 @@ export default function BoardView() {
     await deleteTask(taskId)
   }
 
-  if (loading) return <div className="p-6 text-gray-400 text-sm">Loading…</div>
-  if (!board) return <div className="p-6 text-gray-400">Board not found.</div>
+  if (loading) return <div className="p-6"><LoadingState fullHeight label="Loading board…" /></div>
+  if (!board) return <div className="p-6"><EmptyState icon={KanbanIcon} title="Board not found" description="It may have been deleted, or the link is wrong." /></div>
 
   return (
     <div className="p-6 h-screen flex flex-col">
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-3">
-          <Link to="/boards" className="text-gray-400 hover:text-cyan"><ArrowLeft size={18} /></Link>
-          <h2 className="text-lg font-semibold">{board.name}</h2>
-        </div>
-        <button onClick={handleAddColumn} className="text-sm text-cyan hover:underline flex items-center gap-1">
-          <Plus size={14} /> Column
-        </button>
+      <div className="mb-4">
+        <PageHeader
+          title={board.name}
+          backTo="/boards"
+          actions={
+            <Button variant="secondary" size="sm" onClick={handleAddColumn}>
+              <Plus size={14} /> Column
+            </Button>
+          }
+        />
       </div>
 
       <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-        <div className="flex-1 flex gap-4 overflow-x-auto">
+        <div className="flex-1 flex gap-4 overflow-x-auto pb-2">
           {columns.map((col) => (
             <KanbanColumn key={col.id} column={col} tasks={tasksByColumn.get(col.id) ?? []} onAddTask={handleAddTask} onDeleteTask={handleDeleteTask} />
           ))}
@@ -133,13 +137,17 @@ function KanbanColumn({ column, tasks, onAddTask, onDeleteTask }: {
   }
 
   return (
-    <div ref={setNodeRef} className={`glass-panel w-72 shrink-0 flex flex-col transition-colors ${isOver ? 'ring-1 ring-cyan/60' : ''}`}>
+    <div
+      ref={setNodeRef}
+      className={`glass-panel w-72 shrink-0 flex flex-col transition-colors duration-150 ${isOver ? 'ring-1 ring-cyan/60 bg-cyan/[0.03]' : ''}`}
+    >
       <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
-        <h3 className="text-sm font-medium">{column.name}</h3>
-        <span className="text-xs text-gray-500">{tasks.length}</span>
+        <h3 className="text-sm font-medium truncate">{column.name}</h3>
+        <span className="text-xs text-muted bg-white/5 rounded-full px-2 py-0.5 shrink-0">{tasks.length}</span>
       </div>
       <div className="flex-1 overflow-y-auto p-2 space-y-2 min-h-[100px]">
         {tasks.map((t) => <TaskCard key={t.id} task={t} onDelete={() => onDeleteTask(t.id)} />)}
+        {tasks.length === 0 && <p className="text-xs text-muted text-center py-6">No tasks</p>}
       </div>
       <div className="p-2 border-t border-white/10 flex gap-1.5">
         <input
@@ -149,7 +157,7 @@ function KanbanColumn({ column, tasks, onAddTask, onDeleteTask }: {
           onChange={(e) => setNewTitle(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && submit()}
         />
-        <button onClick={submit} className="text-cyan hover:text-cyan/80 text-xs px-2">Add</button>
+        <button onClick={submit} className="text-cyan hover:text-cyan/80 text-xs px-2 transition-colors duration-150">Add</button>
       </div>
     </div>
   )
@@ -165,11 +173,12 @@ function TaskCard({ task, onDelete, dragging }: { task: Task; onDelete: () => vo
       style={style}
       {...listeners}
       {...attributes}
-      className={`group bg-abyss/70 border border-white/10 rounded-lg p-2.5 text-sm cursor-grab active:cursor-grabbing ${dragging ? 'glow-border' : ''}`}
+      className={`group bg-abyss/70 border border-white/10 rounded-lg p-2.5 text-sm cursor-grab active:cursor-grabbing transition-shadow duration-150 hover:border-white/20 ${dragging ? 'glow-border shadow-lg' : ''}`}
     >
-      <div className="flex items-start justify-between gap-2">
-        <p className="break-words">{task.title}</p>
-        <button onClick={(e) => { e.stopPropagation(); onDelete() }} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-magenta shrink-0">
+      <div className="flex items-start gap-1.5">
+        <GripVertical size={13} className="text-gray-600 shrink-0 mt-0.5 opacity-0 group-hover:opacity-100" />
+        <p className="break-words flex-1">{task.title}</p>
+        <button onClick={(e) => { e.stopPropagation(); onDelete() }} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-magenta shrink-0 transition-colors duration-150">
           <Trash2 size={13} />
         </button>
       </div>
