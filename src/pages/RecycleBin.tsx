@@ -1,13 +1,18 @@
 import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { ArrowLeft, RotateCcw, Trash2, FolderGit2, Folder as FolderIcon, FileCode2 } from 'lucide-react'
+import { RotateCcw, Trash2, FolderGit2, Folder as FolderIcon, FileCode2, Inbox } from 'lucide-react'
 import { listTrash, restoreItem, permanentlyDelete, type TrashedItem } from '../lib/api/trash'
+import { Badge, Button, ConfirmDialog, EmptyState, LoadingState, PageHeader } from '../components/ui'
+import type { BadgeVariant } from '../components/ui'
 
 const ICONS = { project: FolderGit2, folder: FolderIcon, file: FileCode2 }
+const TYPE_BADGE: Record<TrashedItem['type'], BadgeVariant> = { project: 'accent', folder: 'default', file: 'default' }
 
 export default function RecycleBin() {
   const [items, setItems] = useState<TrashedItem[]>([])
   const [loading, setLoading] = useState(true)
+  const [restoringKey, setRestoringKey] = useState<string | null>(null)
+  const [deletingItem, setDeletingItem] = useState<TrashedItem | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   async function refresh() {
     setLoading(true)
@@ -21,50 +26,87 @@ export default function RecycleBin() {
   useEffect(() => { refresh() }, [])
 
   async function handleRestore(item: TrashedItem) {
-    await restoreItem(item)
-    setItems((prev) => prev.filter((i) => !(i.type === item.type && i.id === item.id)))
+    const key = `${item.type}-${item.id}`
+    setRestoringKey(key)
+    try {
+      await restoreItem(item)
+      setItems((prev) => prev.filter((i) => !(i.type === item.type && i.id === item.id)))
+    } finally {
+      setRestoringKey(null)
+    }
   }
 
-  async function handlePurge(item: TrashedItem) {
-    if (!window.confirm(`Permanently delete "${item.name}"? This cannot be undone.`)) return
-    await permanentlyDelete(item)
-    setItems((prev) => prev.filter((i) => !(i.type === item.type && i.id === item.id)))
+  async function confirmPurge() {
+    if (!deletingItem) return
+    setDeleteLoading(true)
+    try {
+      await permanentlyDelete(deletingItem)
+      setItems((prev) => prev.filter((i) => !(i.type === deletingItem.type && i.id === deletingItem.id)))
+      setDeletingItem(null)
+    } finally {
+      setDeleteLoading(false)
+    }
   }
 
   return (
-    <div className="p-6 max-w-4xl mx-auto">
-      <div className="flex items-center gap-3 mb-6">
-        <Link to="/" className="text-gray-400 hover:text-cyan"><ArrowLeft size={18} /></Link>
-        <h2 className="text-lg font-semibold">Recycle bin</h2>
-      </div>
+    <div className="p-3 sm:p-6 max-w-4xl mx-auto space-y-6">
+      <PageHeader title="Recycle bin" backTo="/" subtitle="Deleted projects, folders, and files. Restore them or remove them for good." />
 
-      {loading && <p className="text-sm text-gray-500">Loading…</p>}
-      {!loading && items.length === 0 && <div className="glass-panel p-8 text-center text-gray-500 text-sm">Recycle bin is empty.</div>}
+      {loading && <LoadingState label="Loading recycle bin…" />}
 
-      <div className="glass-panel divide-y divide-white/5">
-        {items.map((item) => {
-          const Icon = ICONS[item.type]
-          return (
-            <div key={`${item.type}-${item.id}`} className="flex items-center justify-between px-4 py-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <Icon size={16} className="text-gray-500 shrink-0" />
-                <div className="min-w-0">
-                  <p className="truncate text-sm">{item.name}</p>
-                  <p className="text-xs text-gray-500 capitalize">{item.type}</p>
+      {!loading && items.length === 0 && (
+        <EmptyState icon={Inbox} title="Recycle bin is empty" description="Anything you delete shows up here until you restore it or remove it permanently." />
+      )}
+
+      {!loading && items.length > 0 && (
+        <div className="glass-panel divide-y divide-white/5">
+          {items.map((item) => {
+            const Icon = ICONS[item.type]
+            const key = `${item.type}-${item.id}`
+            return (
+              <div key={key} className="flex items-center justify-between gap-3 px-4 py-3">
+                <div className="flex items-center gap-3 min-w-0">
+                  <Icon size={16} className="text-muted shrink-0" />
+                  <div className="min-w-0">
+                    <p className="truncate text-sm text-gray-200">{item.name}</p>
+                    <Badge variant={TYPE_BADGE[item.type]} className="mt-1">{item.type}</Badge>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => handleRestore(item)}
+                    loading={restoringKey === key}
+                    aria-label={`Restore ${item.name}`}
+                  >
+                    <RotateCcw size={13} /> Restore
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    onClick={() => setDeletingItem(item)}
+                    aria-label={`Permanently delete ${item.name}`}
+                  >
+                    <Trash2 size={13} /> Delete
+                  </Button>
                 </div>
               </div>
-              <div className="flex items-center gap-3 shrink-0">
-                <button onClick={() => handleRestore(item)} className="text-gray-400 hover:text-cyan flex items-center gap-1 text-xs" title="Restore">
-                  <RotateCcw size={14} /> Restore
-                </button>
-                <button onClick={() => handlePurge(item)} className="text-gray-400 hover:text-magenta flex items-center gap-1 text-xs" title="Delete permanently">
-                  <Trash2 size={14} /> Delete
-                </button>
-              </div>
-            </div>
-          )
-        })}
-      </div>
+            )
+          })}
+        </div>
+      )}
+
+      <ConfirmDialog
+        open={Boolean(deletingItem)}
+        onClose={() => setDeletingItem(null)}
+        onConfirm={confirmPurge}
+        title={`Permanently delete "${deletingItem?.name}"?`}
+        description="This cannot be undone."
+        confirmLabel="Delete permanently"
+        danger
+        loading={deleteLoading}
+      />
     </div>
   )
 }
