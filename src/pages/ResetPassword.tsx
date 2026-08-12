@@ -2,6 +2,7 @@ import { useEffect, useState, type FormEvent } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { supabase } from '../lib/supabase'
+import { Button, Input } from '../components/ui'
 
 export default function ResetPassword() {
   const [password, setPassword] = useState('')
@@ -77,43 +78,35 @@ export default function ResetPassword() {
         )}
 
         {!verifying && error && !ready && (
-          <p role="alert" className="text-sm text-magenta bg-magenta/10 border border-magenta/30 rounded-lg px-3 py-2">{error}</p>
+          <p role="alert" className="text-sm text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">{error}</p>
         )}
 
         {ready && !done && (
           <>
-            <div className="space-y-2">
-              <label htmlFor="password" className="text-xs uppercase tracking-wide text-gray-400">New password</label>
-              <input
-                id="password"
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                className="input-field w-full"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </div>
-            <div className="space-y-2">
-              <label htmlFor="confirmPassword" className="text-xs uppercase tracking-wide text-gray-400">Confirm password</label>
-              <input
-                id="confirmPassword"
-                type="password"
-                required
-                minLength={8}
-                autoComplete="new-password"
-                className="input-field w-full"
-                value={confirmPassword}
-                onChange={(e) => setConfirmPassword(e.target.value)}
-              />
-            </div>
+            <Input
+              label="New password"
+              type="password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+            <Input
+              label="Confirm password"
+              type="password"
+              required
+              minLength={8}
+              autoComplete="new-password"
+              value={confirmPassword}
+              onChange={(e) => setConfirmPassword(e.target.value)}
+            />
 
-            {error && <p role="alert" className="text-sm text-magenta bg-magenta/10 border border-magenta/30 rounded-lg px-3 py-2">{error}</p>}
+            {error && <p role="alert" className="text-sm text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">{error}</p>}
 
-            <button type="submit" disabled={submitting} className="btn-primary w-full">
+            <Button type="submit" loading={submitting} className="w-full">
               {submitting ? 'Updating…' : 'Update password'}
-            </button>
+            </Button>
           </>
         )}
 
