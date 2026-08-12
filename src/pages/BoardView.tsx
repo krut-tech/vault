@@ -178,7 +178,7 @@ function TaskCard({ task, onDelete, dragging }: { task: Task; onDelete: () => vo
       <div className="flex items-start gap-1.5">
         <GripVertical size={13} className="text-gray-600 shrink-0 mt-0.5 opacity-0 group-hover:opacity-100" />
         <p className="break-words flex-1">{task.title}</p>
-        <button onClick={(e) => { e.stopPropagation(); onDelete() }} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-magenta shrink-0 transition-colors duration-150">
+        <button onClick={(e) => { e.stopPropagation(); onDelete() }} className="opacity-0 group-hover:opacity-100 text-gray-500 hover:text-danger shrink-0 transition-colors duration-150" aria-label={`Delete "${task.title}"`}>
           <Trash2 size={13} />
         </button>
       </div>
