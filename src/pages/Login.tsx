@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '../store/authStore'
 import { useBrandingStore } from '../store/brandingStore'
 import { supabase } from '../lib/supabase'
+import { Button, Input } from '../components/ui'
 
 export default function Login() {
   const [email, setEmail] = useState('')
@@ -316,22 +317,23 @@ export default function Login() {
         <form onSubmit={handleMfaSubmit} className="glass-panel glow-border w-full max-w-sm p-8 space-y-5">
           <h1 className="text-xl font-bold neon-gradient-text">Two-factor verification</h1>
           <p className="text-sm text-gray-400">Enter the 6-digit code from your authenticator app.</p>
-          <input
+          <Input
             required
             autoFocus
             maxLength={6}
-            className="input-field w-full text-center text-lg tracking-[0.5em]"
+            aria-label="6-digit verification code"
+            className="text-center text-lg tracking-[0.5em]"
             value={mfaCode}
             onChange={(e) => setMfaCode(e.target.value.replace(/\D/g, ''))}
           />
           {error && (
-            <p role="alert" className="text-sm text-magenta bg-magenta/10 border border-magenta/30 rounded-lg px-3 py-2">
+            <p role="alert" className="text-sm text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2">
               {error}
             </p>
           )}
-          <button type="submit" disabled={mfaSubmitting} className="btn-primary w-full">
+          <Button type="submit" loading={mfaSubmitting} className="w-full">
             {mfaSubmitting ? 'Verifying…' : 'Verify'}
-          </button>
+          </Button>
         </form>
       </div>
     )
@@ -496,7 +498,7 @@ export default function Login() {
       </div>
 
       {error && (
-        <p role="alert" className="text-sm text-magenta bg-magenta/10 border border-magenta/30 rounded-lg px-3 py-2 max-w-sm text-center">
+        <p role="alert" className="text-sm text-danger bg-danger/10 border border-danger/30 rounded-lg px-3 py-2 max-w-sm text-center">
           {error}
         </p>
       )}
