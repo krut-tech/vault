@@ -36,6 +36,18 @@ export default function SplashScreen({ onFinish }: { onFinish: () => void }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Same restrained addition as the other overlays audited this pass:
+  // a fullscreen video that can only be dismissed by finding a small
+  // bottom-right button is a real keyboard-accessibility gap.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') finish()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
   function finish() {
     setFadingOut(true)
     sessionStorage.setItem(SESSION_KEY, '1')

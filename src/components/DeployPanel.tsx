@@ -18,6 +18,18 @@ export default function DeployPanel({ projectId, onClose }: { projectId: string;
   useEffect(() => { listDeployTargets(projectId).then(setTargets) }, [projectId])
   useEffect(() => { if (selected) listDeployments(selected.id).then(setDeployments) }, [selected])
 
+  // Explicitly authorized, minimal addition (see Step 10 audit): the
+  // overlay is hand-rolled, not built on the shared Modal, since its
+  // two-column layout doesn't fit Modal's single-panel shape — Escape
+  // still deserves to work like every other dialog in the app.
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
+
   async function handleDeploy() {
     if (!selected) return
     setDeploying(true)

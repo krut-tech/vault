@@ -3,6 +3,7 @@ import { listVersions, restoreVersion } from '../lib/api/files'
 import type { FileVersion } from '../types/vault'
 import { diffLines } from '../lib/diff'
 import { formatDistanceToNow } from 'date-fns'
+import { ConfirmDialog } from './ui'
 
 interface Props {
   fileId: string
@@ -17,6 +18,8 @@ export default function VersionHistory({ fileId, currentContent, userId, onResto
   const [loading, setLoading] = useState(true)
   const [selected, setSelected] = useState<FileVersion | null>(null)
   const [restoring, setRestoring] = useState(false)
+  const [confirmingRestore, setConfirmingRestore] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -26,11 +29,26 @@ export default function VersionHistory({ fileId, currentContent, userId, onResto
     return () => { cancelled = true }
   }, [fileId])
 
-  async function handleRestore(v: FileVersion) {
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      // Let the confirm dialog own Escape while it's open — closing the
+      // whole panel out from under an open confirmation would be confusing.
+      if (e.key === 'Escape' && !confirmingRestore) onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onClose, confirmingRestore])
+
+  async function handleRestore() {
+    if (!selected) return
     setRestoring(true)
+    setError(null)
     try {
-      await restoreVersion(fileId, v.content, userId)
-      onRestored(v.content)
+      await restoreVersion(fileId, selected.content, userId)
+      onRestored(selected.content)
+      setConfirmingRestore(false)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to restore this version')
     } finally {
       setRestoring(false)
     }
@@ -42,7 +60,7 @@ export default function VersionHistory({ fileId, currentContent, userId, onResto
         <div className="sm:w-64 max-h-40 sm:max-h-none shrink-0 border-b sm:border-b-0 sm:border-r border-white/10 overflow-y-auto">
           <div className="px-4 py-3 border-b border-white/10 flex items-center justify-between">
             <h2 className="font-semibold text-sm">Version history</h2>
-            <button onClick={onClose} className="text-gray-400 hover:text-magenta text-sm" aria-label="Close">✕</button>
+            <button onClick={onClose} className="text-gray-400 hover:text-danger text-sm" aria-label="Close">✕</button>
           </div>
           {loading && <p className="p-4 text-sm text-gray-500">Loading…</p>}
           {!loading && versions.length === 0 && <p className="p-4 text-sm text-gray-500">No saved versions yet.</p>}
@@ -66,12 +84,18 @@ export default function VersionHistory({ fileId, currentContent, userId, onResto
           {!selected && <p className="text-sm text-gray-500">Select a version to compare against current content.</p>}
           {selected && (
             <div className="space-y-3">
+              {error && (
+                <div className="glass-panel border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger flex items-center justify-between gap-3">
+                  <span>{error}</span>
+                  <button onClick={() => setError(null)} className="text-danger/70 hover:text-danger shrink-0">Dismiss</button>
+                </div>
+              )}
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-sm font-medium">
                   Comparing to {formatDistanceToNow(new Date(selected.created_at), { addSuffix: true })}
                 </h3>
-                <button onClick={() => handleRestore(selected)} disabled={restoring} className="btn-primary text-xs px-3 py-1.5 shrink-0">
-                  {restoring ? 'Restoring…' : 'Restore this version'}
+                <button onClick={() => setConfirmingRestore(true)} className="btn-primary text-xs px-3 py-1.5 shrink-0">
+                  Restore this version
                 </button>
               </div>
               <pre className="font-mono text-xs leading-5 bg-abyss/80 rounded-lg p-3 overflow-x-auto">
@@ -80,7 +104,7 @@ export default function VersionHistory({ fileId, currentContent, userId, onResto
                     key={idx}
                     className={
                       line.type === 'added' ? 'bg-cyan/10 text-cyan' :
-                      line.type === 'removed' ? 'bg-magenta/10 text-magenta line-through decoration-magenta/40' :
+                      line.type === 'removed' ? 'bg-danger/10 text-danger line-through decoration-danger/40' :
                       'text-gray-400'
                     }
                   >
@@ -93,6 +117,16 @@ export default function VersionHistory({ fileId, currentContent, userId, onResto
           )}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={confirmingRestore}
+        onClose={() => setConfirmingRestore(false)}
+        onConfirm={handleRestore}
+        title="Restore this version?"
+        description="This replaces the file's current content in the editor. The current content stays in version history too, so this can be undone."
+        confirmLabel="Restore"
+        loading={restoring}
+      />
     </div>
   )
 }

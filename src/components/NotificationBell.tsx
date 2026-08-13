@@ -50,8 +50,15 @@ export default function NotificationBell() {
     function handleClickOutside(e: MouseEvent) {
       if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false)
     }
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') setOpen(false)
+    }
     document.addEventListener('mousedown', handleClickOutside)
-    return () => document.removeEventListener('mousedown', handleClickOutside)
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside)
+      document.removeEventListener('keydown', handleKeyDown)
+    }
   }, [])
 
   const unreadCount = notifications.length
@@ -64,6 +71,7 @@ export default function NotificationBell() {
         onClick={() => setOpen((o) => !o)}
         className="relative h-11 w-11 rounded-full glass-panel glow-border flex items-center justify-center text-gray-400 hover:text-cyan shadow-lg"
         aria-label={`Notifications${unreadCount > 0 ? `, ${unreadCount} unread` : ''}`}
+        aria-expanded={open}
       >
         <Bell size={18} />
         {unreadCount > 0 && (
@@ -78,7 +86,10 @@ export default function NotificationBell() {
           <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/10">
             <span className="text-sm font-medium">Notifications</span>
             {user && unreadCount > 0 && (
-              <button onClick={() => markAllRead(user.id).then(() => setNotifications([]))} className="text-xs text-cyan hover:underline">
+              <button
+                onClick={() => markAllRead(user.id).then(() => setNotifications([])).catch((err) => console.error('Failed to mark all read:', err))}
+                className="text-xs text-cyan hover:underline"
+              >
                 Mark all read
               </button>
             )}
@@ -88,7 +99,11 @@ export default function NotificationBell() {
             <Link
               key={n.id}
               to={n.link ?? '#'}
-              onClick={() => markNotificationRead(n.id).then(() => setNotifications((p) => p.filter((x) => x.id !== n.id)))}
+              onClick={() =>
+                markNotificationRead(n.id)
+                  .then(() => setNotifications((p) => p.filter((x) => x.id !== n.id)))
+                  .catch((err) => console.error('Failed to mark notification read:', err))
+              }
               className="block px-4 py-2.5 text-sm border-b border-white/5 hover:bg-white/5 text-gray-100"
             >
               <p>{n.message}</p>

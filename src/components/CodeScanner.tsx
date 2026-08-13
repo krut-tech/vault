@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { ScanSearch, X, KeyRound, MessageSquareWarning, FileWarning } from 'lucide-react'
 import { scanProject, type ScanFinding } from '../lib/api/scanner'
 
@@ -8,11 +8,23 @@ const COLORS = { secret: 'text-magenta', todo: 'text-violet', 'large-file': 'tex
 export default function CodeScanner({ projectId, onClose }: { projectId: string; onClose: () => void }) {
   const [findings, setFindings] = useState<ScanFinding[] | null>(null)
   const [scanning, setScanning] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    function handleKeyDown(e: KeyboardEvent) {
+      if (e.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [onClose])
 
   async function runScan() {
     setScanning(true)
+    setError(null)
     try {
       setFindings(await scanProject(projectId))
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Scan failed — please try again')
     } finally {
       setScanning(false)
     }
@@ -27,10 +39,17 @@ export default function CodeScanner({ projectId, onClose }: { projectId: string;
       <div className="glass-panel glow-border w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden">
         <div className="flex items-center justify-between px-5 py-3 border-b border-white/10">
           <h2 className="font-semibold text-sm flex items-center gap-1.5"><ScanSearch size={15} /> Code scanner</h2>
-          <button onClick={onClose} className="text-gray-400 hover:text-magenta"><X size={16} /></button>
+          <button onClick={onClose} className="text-gray-400 hover:text-danger" aria-label="Close code scanner"><X size={16} /></button>
         </div>
 
         <div className="p-5 flex-1 overflow-y-auto space-y-4">
+          {error && (
+            <div className="glass-panel border border-danger/30 bg-danger/10 px-4 py-3 text-sm text-danger flex items-center justify-between gap-3">
+              <span>{error}</span>
+              <button onClick={() => setError(null)} className="text-danger/70 hover:text-danger shrink-0">Dismiss</button>
+            </div>
+          )}
+
           {!findings && (
             <div className="text-center py-8">
               <p className="text-sm text-gray-400 mb-4">Scans this project's files for exposed secrets, TODO/FIXME markers, and unusually large files.</p>

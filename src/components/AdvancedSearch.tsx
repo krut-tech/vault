@@ -34,6 +34,7 @@ export default function AdvancedSearch({ open, onClose }: Props) {
   const [fileHits, setFileHits] = useState<FileSearchHit[]>([])
   const [nameHits, setNameHits] = useState<ProjectOrFolderHit[]>([])
   const [searching, setSearching] = useState(false)
+  const [searchError, setSearchError] = useState<string | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
   const [recentSearches, setRecentSearches] = useState<string[]>(() => {
     try {
@@ -79,15 +80,21 @@ export default function AdvancedSearch({ open, onClose }: Props) {
     if (!q.trim()) {
       setFileHits([])
       setNameHits([])
+      setSearchError(null)
       setSearching(false)
       return
     }
     const filters = { projectId: projectId || null, language: language || null, tagId: tagId || null, favoritesOnly }
+    setSearchError(null)
     try {
       const [files, names] = await Promise.all([searchFileContents(q, filters), searchProjectsAndFolders(q, filters)])
       setFileHits(files)
       setNameHits(names)
       saveRecentSearch(q)
+    } catch (err) {
+      setSearchError(err instanceof Error ? err.message : 'Search failed — please try again')
+      setFileHits([])
+      setNameHits([])
     } finally {
       setSearching(false)
     }
@@ -225,6 +232,12 @@ export default function AdvancedSearch({ open, onClose }: Props) {
         </div>
 
         <div ref={listRef} className="overflow-y-auto flex-1 min-h-0">
+          {searchError && (
+            <div className="m-4 glass-panel border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger flex items-center justify-between gap-3">
+              <span>{searchError}</span>
+              <button onClick={() => setSearchError(null)} className="text-danger/70 hover:text-danger shrink-0">Dismiss</button>
+            </div>
+          )}
           {!query.trim() && (
             <div className="p-4">
               {recentSearches.length > 0 ? (
@@ -250,7 +263,7 @@ export default function AdvancedSearch({ open, onClose }: Props) {
           )}
 
           {query.trim() && searching && <p className="p-4 text-xs text-gray-500">Searching…</p>}
-          {query.trim() && !searching && hits.length === 0 && <p className="p-4 text-xs text-gray-500">No matches for "{query}".</p>}
+          {query.trim() && !searching && !searchError && hits.length === 0 && <p className="p-4 text-xs text-gray-500">No matches for "{query}".</p>}
 
           {query.trim() && !searching && hits.length > 0 && (
             <div className="py-1.5">
