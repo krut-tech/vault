@@ -340,7 +340,7 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center gap-6 px-4 py-10">
+    <div className="min-h-[100dvh] flex flex-col items-center justify-center gap-6 px-4 py-10">
       <div className="flex items-center gap-2.5">
         {logoUrl && <img src={logoUrl} alt="" className="h-8 w-8 rounded-lg object-cover" />}
         <h1 className="text-2xl font-bold neon-gradient-text-animated">{appName}</h1>
