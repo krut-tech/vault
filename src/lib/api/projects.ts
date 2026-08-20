@@ -16,7 +16,7 @@ export async function listProjects() {
 export async function createProject(input: {
   name: string
   description: string | null
-  language: string
+  languages: string[]
   created_by: string
   is_private?: boolean
 }) {
@@ -58,10 +58,10 @@ export async function renameProject(id: string, name: string) {
   if (error) throw error
 }
 
-/** Full edit: name, description, language, and (if allowed) privacy in one call. */
+/** Full edit: name, description, languages, and (if allowed) privacy in one call. */
 export async function updateProject(
   id: string,
-  input: { name: string; description: string | null; language: string; is_private?: boolean }
+  input: { name: string; description: string | null; languages: string[]; is_private?: boolean }
 ) {
   const { data, error } = await supabase
     .from('projects')

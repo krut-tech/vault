@@ -18,7 +18,37 @@ import { useBrandingStore } from '../store/brandingStore'
 import { useToastStore } from '../store/toastStore'
 import { formatDistanceToNow } from 'date-fns'
 import GlobalSearch from '../components/GlobalSearch'
-import { Button, Input, Textarea, Select, Modal, EmptyState, Badge, LoadingState, ConfirmDialog, PageHeader } from '../components/ui'
+import { Button, Input, Textarea, Modal, EmptyState, Badge, LoadingState, ConfirmDialog, PageHeader } from '../components/ui'
+
+/** Toggle-chip multi-select for a project's languages. Shared by the create and edit forms. */
+function LanguageChips({ selected, onToggle }: { selected: string[]; onToggle: (lang: string) => void }) {
+  return (
+    <div className="space-y-1.5">
+      <label className="text-xs uppercase tracking-wide text-gray-400">
+        Languages<span className="text-danger ml-0.5">*</span>
+      </label>
+      <div className="flex flex-wrap gap-1.5">
+        {LANGUAGES.map((l) => {
+          const active = selected.includes(l)
+          return (
+            <button
+              key={l}
+              type="button"
+              onClick={() => onToggle(l)}
+              aria-pressed={active}
+              className={`px-2.5 py-1 rounded-full text-xs border transition-colors duration-150 ${
+                active ? 'border-cyan/50 text-cyan bg-cyan/10' : 'border-white/10 text-gray-400 hover:text-gray-200 hover:border-white/20'
+              }`}
+            >
+              {l}
+            </button>
+          )
+        })}
+      </div>
+      {selected.length === 0 && <p className="text-xs text-danger">Select at least one language.</p>}
+    </div>
+  )
+}
 
 export default function Projects() {
   const [projects, setProjects] = useState<Project[]>([])
@@ -187,7 +217,11 @@ export default function Projects() {
                   {p.is_private && <Lock size={12} className="text-magenta shrink-0" />}
                   <span className="truncate">{p.name}</span>
                 </h3>
-                <Badge variant="accent" className="shrink-0">{p.language}</Badge>
+                <div className="flex flex-wrap gap-1 shrink-0 justify-end">
+                  {p.languages.map((l) => (
+                    <Badge key={l} variant="accent">{l}</Badge>
+                  ))}
+                </div>
               </div>
               <p className="text-sm text-secondary line-clamp-2 min-h-[2.5rem]">{p.description || 'No description'}</p>
               <p className="text-xs text-muted mt-3">Updated {formatDistanceToNow(new Date(p.updated_at), { addSuffix: true })}</p>
@@ -246,7 +280,7 @@ function CreateProjectModal({
 }) {
   const [name, setName] = useState('')
   const [description, setDescription] = useState('')
-  const [language, setLanguage] = useState<string>(LANGUAGES[0])
+  const [languages, setLanguages] = useState<string[]>([LANGUAGES[0]])
   const [isPrivate, setIsPrivate] = useState(false)
   const [members, setMembers] = useState<TeamMember[]>([])
   const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set())
@@ -269,15 +303,20 @@ function CreateProjectModal({
     })
   }
 
+  function toggleLanguage(lang: string) {
+    setLanguages((prev) => (prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang]))
+  }
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    if (languages.length === 0) return
     setSubmitting(true)
     setError(null)
     try {
       const project = await createProject({
         name,
         description: description || null,
-        language,
+        languages,
         created_by: userId,
         is_private: canMakePrivate ? isPrivate : false,
       })
@@ -297,9 +336,7 @@ function CreateProjectModal({
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
         <Textarea label="Description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-        <Select label="Primary language" value={language} onChange={(e) => setLanguage(e.target.value)}>
-          {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
-        </Select>
+        <LanguageChips selected={languages} onToggle={toggleLanguage} />
 
         {canMakePrivate && (
           <div className="space-y-3 pt-1 border-t border-white/10">
@@ -335,7 +372,7 @@ function CreateProjectModal({
         {error && <p className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={submitting}>{submitting ? 'Creating…' : 'Create'}</Button>
+          <Button type="submit" loading={submitting} disabled={languages.length === 0}>{submitting ? 'Creating…' : 'Create'}</Button>
         </div>
       </form>
     </Modal>
@@ -357,7 +394,7 @@ function EditProjectModal({
 }) {
   const [name, setName] = useState(project.name)
   const [description, setDescription] = useState(project.description ?? '')
-  const [language, setLanguage] = useState(project.language)
+  const [languages, setLanguages] = useState<string[]>(project.languages)
   const [isPrivate, setIsPrivate] = useState(project.is_private)
   const [members, setMembers] = useState<TeamMember[]>([])
   const [accessUserIds, setAccessUserIds] = useState<Set<string>>(new Set())
@@ -376,6 +413,10 @@ function EditProjectModal({
       .catch(() => {})
       .finally(() => setAccessLoading(false))
   }, [project.id, project.created_by])
+
+  function toggleLanguage(lang: string) {
+    setLanguages((prev) => (prev.includes(lang) ? prev.filter((l) => l !== lang) : [...prev, lang]))
+  }
 
   async function toggleAccess(userId: string, granted: boolean) {
     setSavingAccessId(userId)
@@ -396,13 +437,14 @@ function EditProjectModal({
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
+    if (languages.length === 0) return
     setSubmitting(true)
     setError(null)
     try {
       const updated = await updateProject(project.id, {
         name: name.trim(),
         description: description.trim() || null,
-        language,
+        languages,
         is_private: canMakePrivate ? isPrivate : project.is_private,
       })
       onSaved(updated)
@@ -418,9 +460,7 @@ function EditProjectModal({
       <form onSubmit={handleSubmit} className="space-y-4">
         <Input label="Name" required value={name} onChange={(e) => setName(e.target.value)} />
         <Textarea label="Description" rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
-        <Select label="Primary language" value={language} onChange={(e) => setLanguage(e.target.value)}>
-          {LANGUAGES.map((l) => <option key={l} value={l}>{l}</option>)}
-        </Select>
+        <LanguageChips selected={languages} onToggle={toggleLanguage} />
 
         {canMakePrivate && (
           <div className="space-y-3 pt-1 border-t border-white/10">
@@ -468,7 +508,7 @@ function EditProjectModal({
         {error && <p className="text-sm text-danger">{error}</p>}
         <div className="flex justify-end gap-2 pt-1">
           <Button type="button" variant="secondary" onClick={onClose}>Cancel</Button>
-          <Button type="submit" loading={submitting}>{submitting ? 'Saving…' : 'Save changes'}</Button>
+          <Button type="submit" loading={submitting} disabled={languages.length === 0}>{submitting ? 'Saving…' : 'Save changes'}</Button>
         </div>
       </form>
     </Modal>

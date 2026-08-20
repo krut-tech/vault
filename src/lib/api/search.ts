@@ -15,13 +15,13 @@ export async function globalSearch(query: string): Promise<SearchResult[]> {
   if (!q) return []
 
   const [projects, folders, files] = await Promise.all([
-    supabase.from('projects').select('id, name, language').eq('is_deleted', false).ilike('name', `%${q}%`).limit(10),
+    supabase.from('projects').select('id, name, languages').eq('is_deleted', false).ilike('name', `%${q}%`).limit(10),
     supabase.from('folders').select('id, name, project_id').eq('is_deleted', false).ilike('name', `%${q}%`).limit(10),
     supabase.from('files').select('id, name, language, project_id').eq('is_deleted', false).ilike('name', `%${q}%`).limit(20),
   ])
 
   const results: SearchResult[] = []
-  for (const p of projects.data ?? []) results.push({ type: 'project', id: p.id, title: p.name, subtitle: p.language, projectId: p.id })
+  for (const p of projects.data ?? []) results.push({ type: 'project', id: p.id, title: p.name, subtitle: p.languages.join(', '), projectId: p.id })
   for (const f of folders.data ?? []) results.push({ type: 'folder', id: f.id, title: f.name, subtitle: 'Folder', projectId: f.project_id })
   for (const f of files.data ?? []) results.push({ type: 'file', id: f.id, title: f.name, subtitle: f.language, projectId: f.project_id })
   return results
@@ -99,11 +99,11 @@ export async function searchProjectsAndFolders(query: string, filters: AdvancedS
   const results: ProjectOrFolderHit[] = []
 
   if (!filters.folderId) {
-    let projectQuery = supabase.from('projects').select('id, name, language').eq('is_deleted', false).ilike('name', `%${q}%`).limit(8)
+    let projectQuery = supabase.from('projects').select('id, name, languages').eq('is_deleted', false).ilike('name', `%${q}%`).limit(8)
     if (filters.projectId) projectQuery = projectQuery.eq('id', filters.projectId)
-    if (filters.language) projectQuery = projectQuery.eq('language', filters.language)
+    if (filters.language) projectQuery = projectQuery.overlaps('languages', [filters.language])
     const { data } = await projectQuery
-    for (const p of data ?? []) results.push({ type: 'project', id: p.id, title: p.name, subtitle: p.language, projectId: p.id })
+    for (const p of data ?? []) results.push({ type: 'project', id: p.id, title: p.name, subtitle: p.languages.join(', '), projectId: p.id })
   }
 
   let folderQuery = supabase.from('folders').select('id, name, project_id').eq('is_deleted', false).ilike('name', `%${q}%`).limit(8)

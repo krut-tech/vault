@@ -36,15 +36,14 @@ export function detectLanguage(filename: string): string {
   return EXTENSION_TO_LANGUAGE[ext] ?? 'plaintext'
 }
 
-/** Returns true if the file's extension belongs to the given project language. */
-export function matchesProjectLanguage(filename: string, projectLanguage: string): boolean {
+/** Returns true if the file's extension belongs to ANY of the project's selected languages. */
+export function matchesProjectLanguages(filename: string, projectLanguages: string[]): boolean {
   const ext = getExtension(filename)
-  const allowed = LANGUAGE_EXTENSIONS[projectLanguage] ?? []
-  return allowed.includes(ext)
+  return projectLanguages.some((lang) => (LANGUAGE_EXTENSIONS[lang] ?? []).includes(ext))
 }
 
-/** Comma-separated accept string for <input type="file" accept="..."> */
-export function acceptForLanguage(projectLanguage: string): string {
-  const exts = LANGUAGE_EXTENSIONS[projectLanguage] ?? []
+/** Comma-separated accept string for <input type="file" accept="..."> covering every selected language. */
+export function acceptForLanguages(projectLanguages: string[]): string {
+  const exts = projectLanguages.flatMap((lang) => LANGUAGE_EXTENSIONS[lang] ?? [])
   return exts.map((e) => `.${e}`).join(',')
 }

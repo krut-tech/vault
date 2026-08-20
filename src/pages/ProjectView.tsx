@@ -9,7 +9,7 @@ import { getProject } from '../lib/api/projects'
 import { listFolders, createFolder, renameFolder, moveFolder, softDeleteFolderCascade } from '../lib/api/folders'
 import { listFiles, createFile, toggleFavorite, softDeleteFile, getFile, renameFile, moveFile, duplicateFile } from '../lib/api/files'
 import { listPdfs, uploadPdf, deletePdf, getPdfUrl } from '../lib/api/pdfs'
-import { matchesProjectLanguage, acceptForLanguage } from '../lib/languageMap'
+import { matchesProjectLanguages, acceptForLanguages, detectLanguage } from '../lib/languageMap'
 import type { Project, Folder, VaultFile, PdfFile } from '../types/vault'
 import FileTree from '../components/FileTree'
 import CodeEditor from '../components/CodeEditor'
@@ -171,7 +171,7 @@ export default function ProjectView() {
       project_id: id,
       folder_id: folderId,
       name,
-      language: project?.language ?? 'plaintext',
+      language: detectLanguage(name),
       content: '',
       created_by: user.id,
     })
@@ -239,7 +239,7 @@ export default function ProjectView() {
     const created: VaultFile[] = []
 
     for (const f of incoming) {
-      if (!matchesProjectLanguage(f.name, project.language)) {
+      if (!matchesProjectLanguages(f.name, project.languages)) {
         rejected.push(f.name)
         continue
       }
@@ -249,7 +249,7 @@ export default function ProjectView() {
           project_id: id,
           folder_id: folderId,
           name: f.name,
-          language: project.language,
+          language: detectLanguage(f.name),
           content,
           created_by: user.id,
         })
@@ -265,7 +265,7 @@ export default function ProjectView() {
     if (rejected.length > 0 || failed.length > 0) {
       const parts: string[] = []
       if (rejected.length > 0) {
-        parts.push(`${rejected.length} file(s) skipped (wrong file type for a "${project.language}" project):\n${rejected.join('\n')}`)
+        parts.push(`${rejected.length} file(s) skipped (wrong file type for a "${project.languages.join(', ')}" project):\n${rejected.join('\n')}`)
       }
       if (failed.length > 0) {
         parts.push(`${failed.length} file(s) failed to upload:\n${failed.join('\n')}`)
@@ -313,7 +313,7 @@ export default function ProjectView() {
       const relPath = f.webkitRelativePath || f.name
       const parts = relPath.split('/')
       const fileName = parts.pop()!
-      if (!matchesProjectLanguage(fileName, project.language)) {
+      if (!matchesProjectLanguages(fileName, project.languages)) {
         rejected.push(relPath)
         continue
       }
@@ -324,7 +324,7 @@ export default function ProjectView() {
           project_id: projectId,
           folder_id: folderId,
           name: fileName,
-          language: project.language,
+          language: detectLanguage(fileName),
           content,
           created_by: currentUser.id,
         })
@@ -343,7 +343,7 @@ export default function ProjectView() {
     if (rejected.length > 0 || failed.length > 0) {
       const parts: string[] = []
       if (rejected.length > 0) {
-        parts.push(`${rejected.length} file(s) skipped (wrong file type for a "${project.language}" project):\n${rejected.join('\n')}`)
+        parts.push(`${rejected.length} file(s) skipped (wrong file type for a "${project.languages.join(', ')}" project):\n${rejected.join('\n')}`)
       }
       if (failed.length > 0) {
         parts.push(`${failed.length} file(s) failed to upload:\n${failed.join('\n')}`)
@@ -395,7 +395,7 @@ export default function ProjectView() {
         const parts = entry.name.split('/').filter(Boolean)
         const fileName = parts.pop()!
         if (fileName.startsWith('.')) continue // skip .DS_Store / dotfiles from the archive
-        if (!matchesProjectLanguage(fileName, project.language)) {
+        if (!matchesProjectLanguages(fileName, project.languages)) {
           rejected.push(entry.name)
           continue
         }
@@ -406,7 +406,7 @@ export default function ProjectView() {
             project_id: projectId,
             folder_id: folderId,
             name: fileName,
-            language: project.language,
+            language: detectLanguage(fileName),
             content,
             created_by: currentUser.id,
           })
@@ -426,7 +426,7 @@ export default function ProjectView() {
       if (rejected.length > 0 || failed.length > 0) {
         window.alert(
           `Imported ${createdFiles.length}/${entries.length} file(s) from the ZIP.\n\n` +
-          (rejected.length > 0 ? `${rejected.length} skipped (wrong file type for a "${project.language}" project).\n` : '') +
+          (rejected.length > 0 ? `${rejected.length} skipped (wrong file type for a "${project.languages.join(', ')}" project).\n` : '') +
           (failed.length > 0 ? `${failed.length} failed to read.` : ''),
         )
       }
@@ -611,7 +611,7 @@ export default function ProjectView() {
         ref={uploadFilesInputRef}
         type="file"
         multiple
-        accept={acceptForLanguage(project.language)}
+        accept={acceptForLanguages(project.languages)}
         className="hidden"
         onChange={(e) => { if (e.target.files?.length) handleUploadFiles(null, e.target.files); e.target.value = '' }}
       />
@@ -635,7 +635,9 @@ export default function ProjectView() {
         <div className="flex items-center gap-2 sm:gap-3 flex-wrap min-w-0">
           <Link to="/" className="text-gray-400 hover:text-cyan shrink-0"><ArrowLeft size={18} /></Link>
           <h1 className="font-semibold truncate max-w-[45vw] sm:max-w-none">{project.name}</h1>
-          <Badge variant="accent" className="shrink-0">{project.language}</Badge>
+          {project.languages.map((l) => (
+            <Badge key={l} variant="accent" className="shrink-0">{l}</Badge>
+          ))}
           {project.is_private && (
             <span className="flex items-center gap-1 text-[10px] uppercase tracking-wide text-magenta shrink-0" title="Private project">
               <Lock size={11} /> Private
@@ -711,7 +713,7 @@ export default function ProjectView() {
               files={files}
               pdfs={pdfs}
               activeFileId={activeFileId}
-              acceptExtensions={acceptForLanguage(project.language)}
+              acceptExtensions={acceptForLanguages(project.languages)}
               onSelectFile={openFile}
               onCreateFolder={handleCreateFolder}
               onCreateFile={handleCreateFile}

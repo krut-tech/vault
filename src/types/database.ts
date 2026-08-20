@@ -28,8 +28,8 @@ export interface Database {
         Relationships: []
       }
       projects: {
-        Row: { id: string; name: string; description: string | null; language: string; created_by: string; is_private: boolean; is_deleted: boolean; created_at: string; updated_at: string }
-        Insert: { id?: string; name: string; description?: string | null; language: string; created_by: string; is_private?: boolean; is_deleted?: boolean; created_at?: string; updated_at?: string }
+        Row: { id: string; name: string; description: string | null; languages: string[]; created_by: string; is_private: boolean; is_deleted: boolean; created_at: string; updated_at: string }
+        Insert: { id?: string; name: string; description?: string | null; languages: string[]; created_by: string; is_private?: boolean; is_deleted?: boolean; created_at?: string; updated_at?: string }
         Update: Partial<Database['public']['Tables']['projects']['Insert']>
         Relationships: []
       }

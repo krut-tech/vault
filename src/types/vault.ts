@@ -2,7 +2,7 @@ export interface Project {
   id: string
   name: string
   description: string | null
-  language: string
+  languages: string[]
   created_by: string
   is_private: boolean
   is_deleted: boolean
